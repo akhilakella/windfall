@@ -526,3 +526,94 @@ function showToast(msg) {
   t.classList.add("show");
   setTimeout(() => t.classList.remove("show"), 3000);
 }
+
+// ==================== AI FRUIT CHECKER ====================
+document.getElementById("treePhoto").addEventListener("change", (e) => {
+  const btn = document.getElementById("aiCheckBtn");
+  const result = document.getElementById("aiResult");
+  if (e.target.files[0]) {
+    btn.style.display = "block";
+    result.className = "ai-result hidden";
+    result.innerHTML = "";
+  } else {
+    btn.style.display = "none";
+  }
+});
+
+document.getElementById("aiCheckBtn").addEventListener("click", async () => {
+  const file = document.getElementById("treePhoto").files[0];
+  if (!file) return;
+
+  const resultDiv = document.getElementById("aiResult");
+  resultDiv.className = "ai-loading";
+  resultDiv.classList.remove("hidden");
+  resultDiv.innerHTML = `<div class="ai-spinner"></div> Analysing fruit quality...`;
+
+  try {
+    // Convert image to base64
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const mediaType = file.type || "image/jpeg";
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: mediaType, data: base64 }
+            },
+            {
+              type: "text",
+              text: `You are a fruit quality checker for a community apple rescue app in Rugby, UK. 
+Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):
+{
+  "grade": "good" | "ok" | "bad",
+  "emoji": "🍎" | "⚠️" | "🚫",
+  "headline": "one short headline e.g. Ready to Pick!",
+  "summary": "2-3 sentences about quality and suitability for horses/animals or human use",
+  "tips": "one practical tip for collection or use"
+}
+Grade guide: good = fresh, ripe, suitable for horses/animals or humans. ok = slightly damaged but still usable for animals/cider. bad = rotten, mouldy, unsafe.`
+            }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || "";
+
+    let result;
+    try {
+      result = JSON.parse(text.replace(/```json|```/g, "").trim());
+    } catch {
+      throw new Error("Could not parse AI response");
+    }
+
+    resultDiv.className = `ai-result grade-${result.grade}`;
+    resultDiv.innerHTML = `
+      <div class="ai-result-header">${result.emoji} ${result.headline}</div>
+      <p>${result.summary}</p>
+      <p style="margin-top:8px;opacity:0.8">💡 ${result.tips}</p>
+    `;
+
+  } catch (err) {
+    console.error("AI check failed:", err);
+    resultDiv.className = "ai-result grade-ok";
+    resultDiv.innerHTML = `
+      <div class="ai-result-header">⚠️ Check unavailable</div>
+      <p>Could not analyse the photo right now. You can still submit the tree!</p>
+    `;
+  }
+});
