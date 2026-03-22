@@ -233,6 +233,43 @@ function computeBadges(user) {
   return badges;
 }
 
+// -------------------- AI Fruit Checker --------------------
+app.post("/api/ai-check", authMiddleware, async (req, res) => {
+  try {
+    const { imageBase64, mediaType } = req.body;
+    if (!imageBase64 || !mediaType) return res.status(400).json({ error: "Missing image data" });
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: mediaType, data: imageBase64 } },
+            { text: `You are a fruit quality checker for a community apple rescue app in Rugby, UK. Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):
+{"grade":"good","emoji":"🍎","headline":"one short headline","summary":"2-3 sentences about quality and suitability for horses or humans","tips":"one practical tip"}
+Use grade: good=fresh/ripe/suitable, ok=slightly damaged but usable for animals/cider, bad=rotten/mouldy/unsafe. Use emoji 🍎 for good, ⚠️ for ok, 🚫 for bad.` }
+          ]
+        }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 300 }
+      })
+    });
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    try {
+      const result = JSON.parse(text.replace(/```json|```/g, "").trim());
+      res.json(result);
+    } catch {
+      res.status(500).json({ error: "Could not parse AI response" });
+    }
+  } catch (err) {
+    console.error("AI check error:", err);
+    res.status(500).json({ error: "AI check failed" });
+  }
+});
+
 // -------------------- Serve App --------------------
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
