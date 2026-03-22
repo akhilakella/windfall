@@ -248,7 +248,7 @@ app.post("/api/ai-check", authMiddleware, async (req, res) => {
         "X-Title": "Windfall"
       },
       body: JSON.stringify({
-        model: "meta-llama/llama-3.2-11b-vision-instruct:free",
+        model: "openrouter/free",
         messages: [{
           role: "user",
           content: [
