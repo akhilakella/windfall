@@ -257,6 +257,7 @@ Use grade: good=fresh/ripe/suitable, ok=slightly damaged but usable for animals/
     });
 
     const data = await response.json();
+    console.log("Gemini response:", JSON.stringify(data).substring(0, 500));
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     try {
       const result = JSON.parse(text.replace(/```json|```/g, "").trim());
