@@ -560,46 +560,17 @@ document.getElementById("aiCheckBtn").addEventListener("click", async () => {
 
     const mediaType = file.type || "image/jpeg";
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("/api/ai-check", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        messages: [{
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: mediaType, data: base64 }
-            },
-            {
-              type: "text",
-              text: `You are a fruit quality checker for a community apple rescue app in Rugby, UK. 
-Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):
-{
-  "grade": "good" | "ok" | "bad",
-  "emoji": "🍎" | "⚠️" | "🚫",
-  "headline": "one short headline e.g. Ready to Pick!",
-  "summary": "2-3 sentences about quality and suitability for horses/animals or human use",
-  "tips": "one practical tip for collection or use"
-}
-Grade guide: good = fresh, ripe, suitable for horses/animals or humans. ok = slightly damaged but still usable for animals/cider. bad = rotten, mouldy, unsafe.`
-            }
-          ]
-        }]
-      })
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ imageBase64: base64, mediaType })
     });
 
-    const data = await response.json();
-    const text = data.content?.[0]?.text || "";
-
-    let result;
-    try {
-      result = JSON.parse(text.replace(/```json|```/g, "").trim());
-    } catch {
-      throw new Error("Could not parse AI response");
-    }
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error);
 
     resultDiv.className = `ai-result grade-${result.grade}`;
     resultDiv.innerHTML = `
