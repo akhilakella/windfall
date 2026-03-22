@@ -240,7 +240,7 @@ app.post("/api/ai-check", authMiddleware, async (req, res) => {
     if (!imageBase64 || !mediaType) return res.status(400).json({ error: "Missing image data" });
 
     const apiKey = process.env.GEMINI_API_KEY;
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
