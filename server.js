@@ -120,7 +120,8 @@ app.get("/api/trees", async (req, res) => {
     const keys = await redis.keys("tree:*");
     const trees = [];
     for (const key of keys) {
-      if (key.includes(":")) continue; // skip index keys
+      const parts = key.split(":");
+      if (parts.length !== 2) continue; // skip any nested keys
       const t = await redis.get(key);
       if (t) trees.push(JSON.parse(t));
     }
@@ -208,6 +209,8 @@ app.get("/api/leaderboard", async (req, res) => {
     const users = [];
     for (const key of keys) {
       if (key.includes("email")) continue;
+      const parts = key.split(":");
+      if (parts.length !== 2) continue;
       const u = JSON.parse(await redis.get(key));
       if (u && u.name) users.push({ name: u.name, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, badges: u.badges || [] });
     }
