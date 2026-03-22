@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Windfall</title>
+  <meta name="description" content="Map apple trees in Rugby. Rescue fruit. Feed communities." />
+  <meta name="theme-color" content="#4a7c3f" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<!-- ========== AUTH SCREENS ========== -->
+<div id="authScreen" class="screen active">
+  <div class="auth-bg">
+    <div class="auth-orbs">
+      <div class="orb orb1"></div>
+      <div class="orb orb2"></div>
+      <div class="orb orb3"></div>
+    </div>
+  </div>
+  <div class="auth-container">
+    <div class="auth-logo">
+      <img src="/icons/icon.svg" alt="Windfall" class="auth-icon" />
+      <h1 class="logo-text">Windfall</h1>
+      <p class="logo-sub">Rugby's Apple Rescue Map</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="login">Sign In</button>
+      <button class="auth-tab" data-tab="register">Join</button>
+    </div>
+
+    <!-- Login -->
+    <div id="loginForm" class="auth-form active">
+      <div class="field-group">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email" />
+      </div>
+      <div class="field-group">
+        <label>Password</label>
+        <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" />
+      </div>
+      <div id="loginError" class="auth-error hidden"></div>
+      <button id="loginBtn" class="btn-primary">Sign In</button>
+    </div>
+
+    <!-- Register -->
+    <div id="registerForm" class="auth-form">
+      <div class="field-group">
+        <label>Name</label>
+        <input type="text" id="regName" placeholder="Your name" autocomplete="name" />
+      </div>
+      <div class="field-group">
+        <label>Email</label>
+        <input type="email" id="regEmail" placeholder="your@email.com" autocomplete="email" />
+      </div>
+      <div class="field-group">
+        <label>Password</label>
+        <input type="password" id="regPass" placeholder="Min. 6 characters" autocomplete="new-password" />
+      </div>
+      <div id="regError" class="auth-error hidden"></div>
+      <button id="registerBtn" class="btn-primary">Create Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== MAIN APP ========== -->
+<div id="appScreen" class="screen">
+
+  <!-- Map -->
+  <div id="map"></div>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <img src="/icons/icon.svg" alt="" class="top-icon" />
+      <span class="top-title">Windfall</span>
+    </div>
+    <div class="top-bar-right">
+      <button class="icon-btn" id="leaderboardBtn" title="Leaderboard">🏆</button>
+      <button class="icon-btn" id="profileBtn" title="Profile">👤</button>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><span class="dot dot-green"></span> Ready</div>
+    <div class="legend-item"><span class="dot dot-red"></span> Rotten</div>
+    <div class="legend-item"><span class="dot dot-blue"></span> Picked</div>
+  </div>
+
+  <!-- FAB -->
+  <button id="addTreeBtn" class="fab" title="Report a tree">＋</button>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-view="map">
+      <span class="nav-icon">🗺️</span>
+      <span class="nav-label">Map</span>
+    </button>
+    <button class="nav-btn" data-view="mytrees">
+      <span class="nav-icon">🌳</span>
+      <span class="nav-label">My Trees</span>
+    </button>
+    <button class="nav-btn" data-view="leaderboard">
+      <span class="nav-icon">🏆</span>
+      <span class="nav-label">Rankings</span>
+    </button>
+    <button class="nav-btn" data-view="profile">
+      <span class="nav-icon">👤</span>
+      <span class="nav-label">Profile</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ========== PANELS ========== -->
+
+<!-- Report Tree Panel -->
+<div id="reportPanel" class="panel hidden">
+  <div class="panel-header">
+    <h2>Report a Tree</h2>
+    <button class="panel-close" id="closeReport">✕</button>
+  </div>
+  <div class="panel-body">
+    <p class="panel-hint">Tap the map to drop a pin, or use your current location.</p>
+    <div class="loc-row">
+      <div class="field-group flex-1">
+        <label>Latitude</label>
+        <input type="number" id="pinLat" placeholder="52.370..." step="0.0001" />
+      </div>
+      <div class="field-group flex-1">
+        <label>Longitude</label>
+        <input type="number" id="pinLng" placeholder="-1.265..." step="0.0001" />
+      </div>
+    </div>
+    <button class="btn-secondary" id="useLocationBtn">📍 Use My Location</button>
+
+    <div class="field-group">
+      <label>Fruit Type</label>
+      <select id="treeType">
+        <option value="apple">🍎 Apple</option>
+        <option value="pear">🍐 Pear</option>
+        <option value="plum">🟣 Plum</option>
+        <option value="cherry">🍒 Cherry</option>
+        <option value="other">🌳 Other</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label>Land Type</label>
+      <select id="landType">
+        <option value="public">Public (street / park)</option>
+        <option value="private-permission">Private (with permission)</option>
+        <option value="unknown">Unknown</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label>Estimated Fruit (kg)</label>
+      <input type="number" id="estKg" placeholder="e.g. 20" min="0" step="1" />
+    </div>
+    <div class="field-group">
+      <label>Notes</label>
+      <textarea id="treeNotes" placeholder="e.g. Big Bramley near the gate, loads of windfalls on the ground..." rows="3"></textarea>
+    </div>
+    <div class="field-group">
+      <label>Photo (optional)</label>
+      <input type="file" id="treePhoto" accept="image/*" capture="environment" />
+    </div>
+    <div id="reportError" class="auth-error hidden"></div>
+    <button id="submitTreeBtn" class="btn-primary">Drop Pin 📍</button>
+  </div>
+</div>
+
+<!-- Tree Detail Panel -->
+<div id="treePanel" class="panel hidden">
+  <div class="panel-header">
+    <h2 id="treePanelTitle">Apple Tree</h2>
+    <button class="panel-close" id="closeTree">✕</button>
+  </div>
+  <div class="panel-body" id="treePanelBody">
+  </div>
+</div>
+
+<!-- Profile Panel -->
+<div id="profilePanel" class="panel hidden">
+  <div class="panel-header">
+    <h2>My Profile</h2>
+    <button class="panel-close" id="closeProfile">✕</button>
+  </div>
+  <div class="panel-body">
+    <div class="profile-card">
+      <div class="profile-avatar" id="profileAvatar">🍎</div>
+      <div class="profile-name" id="profileName">-</div>
+      <div class="profile-email" id="profileEmail">-</div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-num" id="statKg">0</div>
+        <div class="stat-lbl">kg rescued</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statTrees">0</div>
+        <div class="stat-lbl">trees mapped</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statPickups">0</div>
+        <div class="stat-lbl">pickups</div>
+      </div>
+    </div>
+    <div class="badges-section">
+      <h3>Badges</h3>
+      <div id="badgesContainer" class="badges-grid"></div>
+    </div>
+    <button id="logoutBtn" class="btn-danger">Sign Out</button>
+  </div>
+</div>
+
+<!-- Leaderboard Panel -->
+<div id="leaderboardPanel" class="panel hidden">
+  <div class="panel-header">
+    <h2>🏆 Rugby Rankings</h2>
+    <button class="panel-close" id="closeLeaderboard">✕</button>
+  </div>
+  <div class="panel-body">
+    <div id="leaderboardList" class="leaderboard-list"></div>
+  </div>
+</div>
+
+<!-- My Trees Panel -->
+<div id="myTreesPanel" class="panel hidden">
+  <div class="panel-header">
+    <h2>🌳 My Reported Trees</h2>
+    <button class="panel-close" id="closeMyTrees">✕</button>
+  </div>
+  <div class="panel-body">
+    <div id="myTreesList" class="my-trees-list"></div>
+  </div>
+</div>
+
+<!-- Overlay -->
+<div id="overlay" class="overlay hidden"></div>
+
+<!-- Toast -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
