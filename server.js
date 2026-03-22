@@ -239,26 +239,32 @@ app.post("/api/ai-check", authMiddleware, async (req, res) => {
     const { imageBase64, mediaType } = req.body;
     if (!imageBase64 || !mediaType) return res.status(400).json({ error: "Missing image data" });
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://windfall-jvc3.onrender.com",
+        "X-Title": "Windfall"
+      },
       body: JSON.stringify({
-        contents: [{
-          parts: [
-            { inline_data: { mime_type: mediaType, data: imageBase64 } },
-            { text: `You are a fruit quality checker for a community apple rescue app in Rugby, UK. Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):
+        model: "meta-llama/llama-3.2-11b-vision-instruct:free",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } },
+            { type: "text", text: `You are a fruit quality checker for a community apple rescue app in Rugby, UK. Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):
 {"grade":"good","emoji":"🍎","headline":"one short headline","summary":"2-3 sentences about quality and suitability for horses or humans","tips":"one practical tip"}
 Use grade: good=fresh/ripe/suitable, ok=slightly damaged but usable for animals/cider, bad=rotten/mouldy/unsafe. Use emoji 🍎 for good, ⚠️ for ok, 🚫 for bad.` }
           ]
         }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 300 }
+        max_tokens: 300
       })
     });
 
     const data = await response.json();
-    console.log("Gemini response:", JSON.stringify(data).substring(0, 500));
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    console.log("OpenRouter response:", JSON.stringify(data).substring(0, 500));
+    const text = data.choices?.[0]?.message?.content || "";
     try {
       const result = JSON.parse(text.replace(/```json|```/g, "").trim());
       res.json(result);
