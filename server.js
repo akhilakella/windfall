@@ -23,10 +23,10 @@ redis.on("connect", () => console.log("Redis connected"));
 // -------------------- Middleware --------------------
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname)));
 
 // Uploads folder
-const uploadsDir = path.join(__dirname, "public", "uploads");
+const uploadsDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -230,7 +230,7 @@ function computeBadges(user) {
 
 // -------------------- Serve App --------------------
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
 app.listen(PORT, () => console.log(`Windfall running on port ${PORT}`));
