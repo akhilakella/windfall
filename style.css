@@ -705,3 +705,37 @@ option { background: var(--green-dark); }
   flex-shrink: 0;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ==================== ANNOUNCEMENT BANNER ==================== */
+.announcement-banner {
+  position: fixed;
+  top: 56px; left: 0; right: 0;
+  z-index: 150;
+  background: linear-gradient(135deg, var(--gold), #c8960a);
+  color: #1a1000;
+  padding: 10px 40px 10px 16px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 2px 12px rgba(212,168,67,0.4);
+}
+.announcement-banner button {
+  position: absolute;
+  right: 10px; top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: #1a1000;
+  opacity: 0.7;
+  padding: 4px 8px;
+}
+.announcement-banner button:hover { opacity: 1; }
+
+/* ==================== ADMIN TABS ==================== */
+.admin-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
