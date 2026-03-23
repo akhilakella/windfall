@@ -56,6 +56,7 @@
       </div>
       <div id="loginError" class="auth-error hidden"></div>
       <button id="loginBtn" class="btn-primary">Sign In</button>
+      <button id="forgotPassBtn" style="background:none;border:none;color:var(--text-sub);font-size:0.82rem;cursor:pointer;margin-top:4px;text-decoration:underline;">Forgot password?</button>
     </div>
 
     <!-- Register -->
@@ -74,6 +75,61 @@
       </div>
       <div id="regError" class="auth-error hidden"></div>
       <button id="registerBtn" class="btn-primary">Create Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== FORGOT PASSWORD SCREEN ========== -->
+<div id="forgotScreen" class="screen">
+  <div class="auth-bg">
+    <div class="auth-orbs">
+      <div class="orb orb1"></div>
+      <div class="orb orb2"></div>
+    </div>
+  </div>
+  <div class="auth-container">
+    <div class="auth-logo">
+      <img src="/icon.svg" alt="Windfall" class="auth-icon" />
+      <h1 class="logo-text">Windfall</h1>
+      <p class="logo-sub">Reset your password</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div class="field-group">
+        <label>Your Email</label>
+        <input type="email" id="forgotEmail" placeholder="your@email.com" autocomplete="email" />
+      </div>
+      <div id="forgotMsg" class="hidden" style="font-size:0.85rem;padding:10px 14px;border-radius:10px;"></div>
+      <button id="sendResetBtn" class="btn-primary">📧 Send Reset Link</button>
+      <button id="backToLoginBtn" style="background:none;border:none;color:var(--text-sub);font-size:0.85rem;cursor:pointer;text-decoration:underline;">← Back to Sign In</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== RESET PASSWORD SCREEN ========== -->
+<div id="resetScreen" class="screen">
+  <div class="auth-bg">
+    <div class="auth-orbs">
+      <div class="orb orb1"></div>
+      <div class="orb orb2"></div>
+    </div>
+  </div>
+  <div class="auth-container">
+    <div class="auth-logo">
+      <img src="/icon.svg" alt="Windfall" class="auth-icon" />
+      <h1 class="logo-text">Windfall</h1>
+      <p class="logo-sub">Choose a new password</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div class="field-group">
+        <label>New Password</label>
+        <input type="password" id="resetNewPass" placeholder="Min. 6 characters" autocomplete="new-password" />
+      </div>
+      <div class="field-group">
+        <label>Confirm Password</label>
+        <input type="password" id="resetConfirmPass" placeholder="Repeat new password" />
+      </div>
+      <div id="resetMsg" class="hidden" style="font-size:0.85rem;padding:10px 14px;border-radius:10px;"></div>
+      <button id="doResetBtn" class="btn-primary">🔑 Set New Password</button>
     </div>
   </div>
 </div>
@@ -195,7 +251,7 @@
       <input type="file" id="treePhoto" accept="image/*" capture="environment" />
     </div>
 
-    <button id="aiCheckBtn" class="btn-secondary" style="display:none">🤖 AI Fruit Quality Checker</button>
+    <button id="aiCheckBtn" class="btn-secondary" style="display:none">🤖 AI Fruit Quality Check</button>
     <div id="aiResult" class="ai-result hidden"></div>
 
     <div id="reportError" class="auth-error hidden"></div>
@@ -243,6 +299,15 @@
       <h3>Badges</h3>
       <div id="badgesContainer" class="badges-grid"></div>
     </div>
+
+    <div class="field-group" style="margin-top:4px;">
+      <label>Change Password</label>
+      <input type="password" id="currentPass" placeholder="Current password" />
+      <input type="password" id="newPass" placeholder="New password (min. 6 chars)" style="margin-top:8px;" />
+      <button id="changePassBtn" class="btn-secondary" style="margin-top:8px;">🔑 Update Password</button>
+      <div id="changePassMsg" class="hidden" style="font-size:0.82rem;margin-top:6px;padding:8px 12px;border-radius:8px;"></div>
+    </div>
+
     <button id="logoutBtn" class="btn-danger">Sign Out</button>
   </div>
 </div>
@@ -282,11 +347,11 @@
       <div class="profile-email">Creator of Windfall</div>
     </div>
     <div style="background:rgba(74,124,63,0.1);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;display:flex;flex-direction:column;gap:8px;">
-      <p style="font-size:0.85rem;color:var(--text-sub)">Got a wrong pin on the map? Found a bug? Or just want to say hi? Drop me a message! </p>
+      <p style="font-size:0.85rem;color:var(--text-sub)">Found a tree that needs removing? Spotted a bug? Want to get involved? Get in touch!</p>
       <a href="mailto:akhilakella@outlook.com" style="color:var(--green-light);font-weight:600;font-size:0.95rem;text-decoration:none;">📧 akhilakella@outlook.com</a>
     </div>
     <div style="font-size:0.8rem;color:var(--text-muted);text-align:center;line-height:1.6;">
-      Windfall is a free, community-powered app built by Akhil Akella in Rugby, Warwickshire.<br/>
+      Windfall is a free, community-powered app built by a 13-year-old in Rugby, Warwickshire.<br/>
       Warwickshire Youth Council Member · BBC CWR Young Hero Award Winner
     </div>
   </div>
