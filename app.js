@@ -22,6 +22,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupFAB();
   setupLeaderboardBtn();
   setupProfileBtn();
+  setupAdminTabs();
+  loadAnnouncement();
 
   if (token) {
     try {
@@ -564,21 +566,148 @@ function showToast(msg) {
 }
 
 // ==================== ADMIN ====================
-function openAdminPanel() {
+function setupAdminTabs() {
+  document.querySelectorAll("[data-admin-tab]").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll("[data-admin-tab]").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".admin-tab-content").forEach(c => c.style.display = "none");
+      tab.classList.add("active");
+      const tabName = tab.dataset.adminTab;
+      document.getElementById(`adminTab-${tabName}`).style.display = "flex";
+      if (tabName === "analytics") loadAdminAnalytics();
+      if (tabName === "trees") loadAdminTrees();
+      if (tabName === "announce") loadCurrentAnnouncement();
+    });
+  });
+
+  document.getElementById("resetStatsBtn").addEventListener("click", async () => {
+    if (!confirm("Reset ALL users' stats? This cannot be undone!")) return;
+    try {
+      const res = await apiFetch("/api/admin/reset-stats", { method: "POST" });
+      if (res.ok) { showToast("✅ All stats reset!"); currentUser.kgRescued = 0; currentUser.pickups = 0; currentUser.treesReported = 0; currentUser.badges = []; updateProfilePanel(); }
+      else showToast("Failed to reset stats");
+    } catch { showToast("Error resetting stats"); }
+  });
+
+  document.getElementById("postAnnouncementBtn").addEventListener("click", async () => {
+    const message = document.getElementById("announcementText").value.trim();
+    try {
+      const res = await apiFetch("/api/admin/announcement", { method: "POST", body: JSON.stringify({ message }) });
+      if (res.ok) { showToast("📢 Notice posted!"); loadAnnouncement(); }
+      else showToast("Failed to post notice");
+    } catch { showToast("Error posting notice"); }
+  });
+
+  document.getElementById("clearAnnouncementBtn").addEventListener("click", async () => {
+    try {
+      const res = await apiFetch("/api/admin/announcement", { method: "POST", body: JSON.stringify({ message: "" }) });
+      if (res.ok) { showToast("Notice cleared!"); document.getElementById("announcementBanner").classList.add("hidden"); document.getElementById("announcementText").value = ""; }
+    } catch { showToast("Error clearing notice"); }
+  });
+
+  document.getElementById("dismissAnnouncement").addEventListener("click", () => {
+    document.getElementById("announcementBanner").classList.add("hidden");
+  });
+}
+
+async function loadAdminAnalytics() {
+  try {
+    const res = await apiFetch("/api/admin/analytics");
+    const data = await res.json();
+    document.getElementById("aStat-kg").textContent = (data.totalKg || 0).toFixed(1);
+    document.getElementById("aStat-trees").textContent = data.totalTrees || 0;
+    document.getElementById("aStat-users").textContent = data.totalUsers || 0;
+    document.getElementById("adminTopUsers").innerHTML = (data.topUsers || []).length === 0
+      ? `<p style="color:var(--text-muted);font-size:0.85rem">No users yet</p>`
+      : data.topUsers.map((u, i) => `
+          <div class="leader-row">
+            <div class="leader-rank">${i + 1}</div>
+            <div class="leader-info">
+              <div class="leader-name">${u.name}</div>
+              <div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div>
+            </div>
+            <div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div>
+          </div>`).join("");
+  } catch { showToast("Could not load analytics"); }
+}
+
+function loadAdminTrees() {
   document.getElementById("adminTreesList").innerHTML = allTrees.length === 0
     ? `<p style="color:var(--text-muted);text-align:center">No trees on the map yet.</p>`
     : allTrees.map(t => `
-        <div class="my-tree-card" style="display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div class="my-tree-header">
-              <span class="my-tree-type">${getFruitEmoji(t.type)} ${capitalise(t.type)}</span>
-              <span class="my-tree-date">${timeSince(t.reportedAt)}</span>
+        <div class="my-tree-card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+            <div>
+              <div class="my-tree-type">${getFruitEmoji(t.type)} ${capitalise(t.type)}</div>
+              <div class="my-tree-notes">by ${t.reportedByName} · ${t.address || "No address"}</div>
             </div>
-            <div class="my-tree-notes">by ${t.reportedByName} · ${t.address || "No address"}</div>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button onclick="openEditTree('${t.id}')" style="background:rgba(74,124,63,0.2);border:1px solid var(--border);color:var(--green-light);border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✏️</button>
+              <button onclick="deleteTree('${t.id}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">🗑</button>
+            </div>
           </div>
-          <button onclick="deleteTree('${t.id}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:6px 12px;font-size:0.8rem;cursor:pointer;flex-shrink:0;margin-left:10px;">🗑 Delete</button>
-        </div>
-      `).join("");
+          <div id="editForm-${t.id}" style="display:none;flex-direction:column;gap:8px;margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+            <input type="text" id="editNotes-${t.id}" value="${t.notes || ""}" placeholder="Notes" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
+            <input type="text" id="editAddress-${t.id}" value="${t.address || ""}" placeholder="Address" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
+            <input type="number" id="editKg-${t.id}" value="${t.estimatedKg || 0}" placeholder="Estimated kg" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
+            <button onclick="saveEditTree('${t.id}')" class="btn-primary btn-sm">💾 Save</button>
+          </div>
+        </div>`).join("");
+}
+
+function openEditTree(treeId) {
+  const form = document.getElementById(`editForm-${treeId}`);
+  form.style.display = form.style.display === "none" ? "flex" : "none";
+}
+window.openEditTree = openEditTree;
+
+async function saveEditTree(treeId) {
+  const notes = document.getElementById(`editNotes-${treeId}`).value;
+  const address = document.getElementById(`editAddress-${treeId}`).value;
+  const estimatedKg = document.getElementById(`editKg-${treeId}`).value;
+  try {
+    const res = await apiFetch(`/api/admin/trees/${treeId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ notes, address, estimatedKg })
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      const idx = allTrees.findIndex(t => t.id === treeId);
+      if (idx !== -1) allTrees[idx] = updated;
+      addTreeMarker(updated);
+      showToast("✅ Tree updated!");
+      loadAdminTrees();
+    } else showToast("Failed to update tree");
+  } catch { showToast("Error updating tree"); }
+}
+window.saveEditTree = saveEditTree;
+
+async function loadCurrentAnnouncement() {
+  try {
+    const res = await fetch("/api/announcement");
+    const data = await res.json();
+    if (data && data.message) document.getElementById("announcementText").value = data.message;
+  } catch {}
+}
+
+async function loadAnnouncement() {
+  try {
+    const res = await fetch("/api/announcement");
+    const data = await res.json();
+    if (data && data.message) {
+      document.getElementById("announcementMsg").textContent = "📢 " + data.message;
+      document.getElementById("announcementBanner").classList.remove("hidden");
+    }
+  } catch {}
+}
+
+function openAdminPanel() {
+  // Reset to analytics tab
+  document.querySelectorAll("[data-admin-tab]").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".admin-tab-content").forEach(c => c.style.display = "none");
+  document.querySelector("[data-admin-tab='analytics']").classList.add("active");
+  document.getElementById("adminTab-analytics").style.display = "flex";
+  loadAdminAnalytics();
   openPanel("adminPanel");
 }
 
@@ -590,12 +719,10 @@ async function deleteTree(treeId) {
     allTrees = allTrees.filter(t => t.id !== treeId);
     if (markers[treeId]) { map.removeLayer(markers[treeId]); delete markers[treeId]; }
     showToast("🗑 Tree deleted!");
-    openAdminPanel();
+    loadAdminTrees();
   } catch { showToast("Error deleting tree"); }
 }
 window.deleteTree = deleteTree;
-
-// ==================== AI FRUIT CHECKER ====================
 document.getElementById("treePhoto").addEventListener("change", (e) => {
   const btn = document.getElementById("aiCheckBtn");
   const result = document.getElementById("aiResult");
