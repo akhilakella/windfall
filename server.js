@@ -210,6 +210,94 @@ app.patch("/api/trees/:id/status", authMiddleware, async (req, res) => {
   }
 });
 
+// Forgot password - send reset email
+app.post("/api/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email required" });
+
+    const userId = await redis.get(`user:email:${email.toLowerCase()}`);
+    if (!userId) return res.json({ success: true }); // Don't reveal if email exists
+
+    const resetToken = uuidv4();
+    await redis.set(`reset:${resetToken}`, userId, "EX", 3600); // 1 hour expiry
+
+    const resetUrl = `${process.env.APP_URL || "https://windfall-jvc3.onrender.com"}/reset-password?token=${resetToken}`;
+
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.RESEND_API_KEY}`
+      },
+      body: JSON.stringify({
+        from: "Windfall <onboarding@resend.dev>",
+        to: email.toLowerCase(),
+        subject: "Reset your Windfall password",
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0f1a0e;color:#e8f0e6;border-radius:16px;">
+            <h1 style="font-size:1.8rem;margin-bottom:8px;">🍎 Windfall</h1>
+            <p style="color:#8aab85;margin-bottom:24px;">Rugby's Apple Rescue Map</p>
+            <h2 style="font-size:1.2rem;margin-bottom:12px;">Reset your password</h2>
+            <p style="margin-bottom:24px;line-height:1.6;">Click the button below to reset your password. This link expires in 1 hour.</p>
+            <a href="${resetUrl}" style="display:inline-block;background:#4a7c3f;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;margin-bottom:24px;">Reset Password</a>
+            <p style="font-size:0.8rem;color:#556b52;">If you didn't request this, you can safely ignore this email.</p>
+          </div>
+        `
+      })
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Reset password with token
+app.post("/api/reset-password", async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) return res.status(400).json({ error: "All fields required" });
+    if (newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+
+    const userId = await redis.get(`reset:${token}`);
+    if (!userId) return res.status(400).json({ error: "Reset link is invalid or has expired" });
+
+    const user = JSON.parse(await redis.get(`user:${userId}`));
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await redis.set(`user:${userId}`, JSON.stringify(user));
+    await redis.del(`reset:${token}`);
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Change password
+app.post("/api/change-password", authMiddleware, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: "All fields required" });
+    if (newPassword.length < 6) return res.status(400).json({ error: "New password must be at least 6 characters" });
+
+    const user = JSON.parse(await redis.get(`user:${req.user.id}`));
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const match = await bcrypt.compare(currentPassword, user.password);
+    if (!match) return res.status(401).json({ error: "Current password is incorrect" });
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await redis.set(`user:${req.user.id}`, JSON.stringify(user));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // -------------------- Admin Routes --------------------
 app.get("/api/admin/check", authMiddleware, (req, res) => {
   res.json({ isAdmin: req.user.email === ADMIN_EMAIL });
