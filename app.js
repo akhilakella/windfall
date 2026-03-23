@@ -390,6 +390,41 @@ window.logPickup = logPickup;
 // ==================== PROFILE PANEL ====================
 function setupProfileBtn() {
   document.getElementById("profileBtn").addEventListener("click", () => openPanel("profilePanel"));
+
+  document.getElementById("changePassBtn").addEventListener("click", async () => {
+    const newPass = document.getElementById("newPass").value;
+    const confirmPass = document.getElementById("confirmNewPass").value;
+    const msg = document.getElementById("changePassMsg");
+    msg.classList.add("hidden");
+
+    if (!newPass || !confirmPass) { showPassMsg("Please fill in both fields.", false); return; }
+    if (newPass.length < 6) { showPassMsg("Password must be at least 6 characters.", false); return; }
+    if (newPass !== confirmPass) { showPassMsg("Passwords don't match!", false); return; }
+
+    try {
+      const res = await apiFetch("/api/change-password", {
+        method: "POST",
+        body: JSON.stringify({ newPassword: newPass })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showPassMsg("✅ Password updated!", true);
+        document.getElementById("newPass").value = "";
+        document.getElementById("confirmNewPass").value = "";
+      } else {
+        showPassMsg(data.error || "Failed to update password.", false);
+      }
+    } catch { showPassMsg("Something went wrong.", false); }
+  });
+}
+
+function showPassMsg(text, success) {
+  const el = document.getElementById("changePassMsg");
+  el.textContent = text;
+  el.style.background = success ? "rgba(76,175,80,0.15)" : "rgba(192,57,43,0.15)";
+  el.style.border = success ? "1px solid rgba(76,175,80,0.4)" : "1px solid rgba(192,57,43,0.4)";
+  el.style.color = success ? "#81c784" : "#ff8a7a";
+  el.classList.remove("hidden");
 }
 
 function updateProfilePanel() {
