@@ -96,6 +96,12 @@
     </div>
   </div>
 
+  <!-- Announcement Banner -->
+  <div id="announcementBanner" class="announcement-banner hidden">
+    <span id="announcementMsg"></span>
+    <button id="dismissAnnouncement">✕</button>
+  </div>
+
   <!-- Legend -->
   <div class="legend">
     <div class="legend-item"><span class="dot dot-green"></span> Ready</div>
@@ -292,11 +298,46 @@
     <h2>🔧 Admin Panel</h2>
     <button class="panel-close" id="closeAdmin">✕</button>
   </div>
-  <div class="panel-body">
-    <p style="font-size:0.85rem;color:var(--text-sub);background:rgba(212,168,67,0.1);border:1px solid rgba(212,168,67,0.3);border-radius:var(--radius-sm);padding:12px;">
-      ⚠️ Admin powers — use carefully! You can delete any tree from the map.
-    </p>
-    <div id="adminTreesList" class="my-trees-list"></div>
+  <div class="panel-body" style="padding-top:0;gap:0;">
+    <!-- Admin Tabs -->
+    <div class="auth-tabs" style="margin:16px 0 12px;flex-shrink:0;">
+      <button class="auth-tab active" data-admin-tab="analytics">📊 Stats</button>
+      <button class="auth-tab" data-admin-tab="trees">🌳 Trees</button>
+      <button class="auth-tab" data-admin-tab="announce">📢 Notice</button>
+      <button class="auth-tab" data-admin-tab="danger">⚠️ Reset</button>
+    </div>
+
+    <!-- Analytics Tab -->
+    <div id="adminTab-analytics" class="admin-tab-content">
+      <div class="stats-row" id="adminStatsRow">
+        <div class="stat-box"><div class="stat-num" id="aStat-kg">-</div><div class="stat-lbl">total kg</div></div>
+        <div class="stat-box"><div class="stat-num" id="aStat-trees">-</div><div class="stat-lbl">trees mapped</div></div>
+        <div class="stat-box"><div class="stat-num" id="aStat-users">-</div><div class="stat-lbl">users</div></div>
+      </div>
+      <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin:12px 0 8px;">Top Rescuers</h3>
+      <div id="adminTopUsers" class="leaderboard-list"></div>
+    </div>
+
+    <!-- Trees Tab -->
+    <div id="adminTab-trees" class="admin-tab-content" style="display:none;">
+      <div id="adminTreesList" class="my-trees-list"></div>
+    </div>
+
+    <!-- Announcement Tab -->
+    <div id="adminTab-announce" class="admin-tab-content" style="display:none;gap:12px;display:none;flex-direction:column;">
+      <p style="font-size:0.85rem;color:var(--text-sub);">Post a notice that appears on the map for all users. Leave blank and save to clear it.</p>
+      <textarea id="announcementText" rows="4" placeholder="e.g. Apple season is here! Head to Dunchurch Park to find trees ready to pick 🍎" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.9rem;resize:vertical;outline:none;"></textarea>
+      <button class="btn-primary" id="postAnnouncementBtn">📢 Post Notice</button>
+      <button class="btn-secondary" id="clearAnnouncementBtn">✕ Clear Notice</button>
+    </div>
+
+    <!-- Danger Tab -->
+    <div id="adminTab-danger" class="admin-tab-content" style="display:none;">
+      <div style="background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.3);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+        <p style="font-size:0.85rem;color:#ff8a7a;line-height:1.5;">⚠️ This will reset ALL users' kg rescued, pickups, trees reported and badges back to zero. This cannot be undone!</p>
+      </div>
+      <button class="btn-danger" id="resetStatsBtn">🔄 Reset All Stats</button>
+    </div>
   </div>
 </div>
 
