@@ -330,7 +330,37 @@ app.patch("/api/admin/trees/:id", authMiddleware, adminMiddleware, async (req, r
   }
 });
 
-// Admin: reset all stats
+// Admin: delete user
+app.delete("/api/admin/users/:id", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const user = JSON.parse(await redis.get(`user:${req.params.id}`));
+    if (!user) return res.status(404).json({ error: "User not found" });
+    await redis.del(`user:${user.id}`);
+    await redis.del(`user:email:${user.email}`);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Admin: get all users
+app.get("/api/admin/users", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const keys = await redis.keys("user:*");
+    const users = [];
+    for (const key of keys) {
+      if (key.includes("email")) continue;
+      const parts = key.split(":");
+      if (parts.length !== 2) continue;
+      const u = JSON.parse(await redis.get(key));
+      if (u && u.name) users.push({ id: u.id, name: u.name, email: u.email, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, joinedAt: u.joinedAt });
+    }
+    users.sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0));
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
 app.post("/api/admin/reset-stats", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const keys = await redis.keys("user:*");
