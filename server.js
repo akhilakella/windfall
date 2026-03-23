@@ -226,6 +226,119 @@ app.delete("/api/trees/:id", authMiddleware, adminMiddleware, async (req, res) =
   }
 });
 
+// Admin: edit tree
+app.patch("/api/admin/trees/:id", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const raw = await redis.get(`tree:${req.params.id}`);
+    if (!raw) return res.status(404).json({ error: "Tree not found" });
+    const tree = JSON.parse(raw);
+    const { type, notes, landType, estimatedKg, address } = req.body;
+    if (type) tree.type = type;
+    if (notes !== undefined) tree.notes = notes;
+    if (landType) tree.landType = landType;
+    if (estimatedKg !== undefined) tree.estimatedKg = parseFloat(estimatedKg) || 0;
+    if (address !== undefined) tree.address = address;
+    await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
+    res.json(tree);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Admin: reset all stats
+app.post("/api/admin/reset-stats", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const keys = await redis.keys("user:*");
+    for (const key of keys) {
+      if (key.includes("email")) continue;
+      const parts = key.split(":");
+      if (parts.length !== 2) continue;
+      const u = JSON.parse(await redis.get(key));
+      if (u) {
+        u.kgRescued = 0;
+        u.pickups = 0;
+        u.treesReported = 0;
+        u.badges = [];
+        await redis.set(key, JSON.stringify(u));
+      }
+    }
+    // Also reset all tree pickup history
+    const treeKeys = await redis.keys("tree:*");
+    for (const key of treeKeys) {
+      const parts = key.split(":");
+      if (parts.length !== 2) continue;
+      const t = JSON.parse(await redis.get(key));
+      if (t) {
+        t.pickups = [];
+        t.status = "active";
+        await redis.set(key, JSON.stringify(t));
+      }
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Admin: analytics
+app.get("/api/admin/analytics", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const userKeys = await redis.keys("user:*");
+    const treeKeys = await redis.keys("tree:*");
+    let totalKg = 0, totalUsers = 0, totalTrees = 0, totalPickups = 0;
+    const userStats = [];
+
+    for (const key of userKeys) {
+      if (key.includes("email")) continue;
+      const parts = key.split(":");
+      if (parts.length !== 2) continue;
+      const u = JSON.parse(await redis.get(key));
+      if (u && u.name) {
+        totalUsers++;
+        totalKg += u.kgRescued || 0;
+        totalPickups += u.pickups || 0;
+        userStats.push({ name: u.name, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0 });
+      }
+    }
+
+    for (const key of treeKeys) {
+      const parts = key.split(":");
+      if (parts.length !== 2) continue;
+      totalTrees++;
+    }
+
+    userStats.sort((a, b) => b.kgRescued - a.kgRescued);
+    res.json({ totalKg, totalUsers, totalTrees, totalPickups, topUsers: userStats.slice(0, 5) });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Admin: post/get announcement
+app.post("/api/admin/announcement", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) {
+      await redis.del("announcement");
+      return res.json({ success: true, cleared: true });
+    }
+    const announcement = { message, postedAt: Date.now() };
+    await redis.set("announcement", JSON.stringify(announcement));
+    res.json(announcement);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/api/announcement", async (req, res) => {
+  try {
+    const raw = await redis.get("announcement");
+    res.json(raw ? JSON.parse(raw) : null);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // -------------------- Leaderboard --------------------
 app.get("/api/leaderboard", async (req, res) => {
   try {
