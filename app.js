@@ -5,6 +5,7 @@
 const API = "";
 let token = localStorage.getItem("wf_token");
 let currentUser = null;
+let isAdmin = false;
 let map = null;
 let markers = {};
 let tempMarker = null;
@@ -123,12 +124,34 @@ document.getElementById("logoutBtn").addEventListener("click", () => {
 });
 
 // ==================== APP INIT ====================
-function showApp() {
+async function showApp() {
   document.getElementById("authScreen").classList.remove("active");
   document.getElementById("appScreen").classList.add("active");
   initMap();
   loadTrees();
   updateProfilePanel();
+  // Check if admin
+  try {
+    const res = await apiFetch("/api/admin/check");
+    const data = await res.json();
+    isAdmin = data.isAdmin;
+    if (isAdmin) {
+      // Add admin button to nav
+      const nav = document.querySelector(".bottom-nav");
+      if (!document.querySelector('[data-view="admin"]')) {
+        const btn = document.createElement("button");
+        btn.className = "nav-btn";
+        btn.dataset.view = "admin";
+        btn.innerHTML = `<span class="nav-icon">🔧</span><span class="nav-label">Admin</span>`;
+        nav.appendChild(btn);
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          openAdminPanel();
+        });
+      }
+    }
+  } catch {}
 }
 
 // ==================== MAP ====================
@@ -224,13 +247,21 @@ function setupFAB() {
 
   document.getElementById("useLocationBtn").addEventListener("click", () => {
     if (!navigator.geolocation) { showToast("Geolocation not supported"); return; }
-    navigator.geolocation.getCurrentPosition(pos => {
+    navigator.geolocation.getCurrentPosition(async pos => {
       const { latitude: lat, longitude: lng } = pos.coords;
       document.getElementById("pinLat").value = lat.toFixed(6);
       document.getElementById("pinLng").value = lng.toFixed(6);
       map.setView([lat, lng], 16);
       placeTempMarker(lat, lng);
       showToast("Location found! ✅");
+      // Reverse geocode
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+        const d = await r.json();
+        const addr = d.address;
+        const street = [addr.house_number, addr.road, addr.suburb, addr.town || addr.city || addr.village].filter(Boolean).join(", ");
+        document.getElementById("pinAddress").value = street || d.display_name?.split(",").slice(0,3).join(",") || "";
+      } catch { document.getElementById("pinAddress").value = ""; }
     }, () => showToast("Could not get location"));
   });
 
@@ -244,6 +275,7 @@ async function submitTree() {
   const landType = document.getElementById("landType").value;
   const notes = document.getElementById("treeNotes").value;
   const estKg = document.getElementById("estKg").value;
+  const address = document.getElementById("pinAddress").value;
   const photoFile = document.getElementById("treePhoto").files[0];
   const err = document.getElementById("reportError");
   err.classList.add("hidden");
@@ -257,6 +289,7 @@ async function submitTree() {
   fd.append("landType", landType);
   fd.append("notes", notes);
   fd.append("estimatedKg", estKg || 0);
+  fd.append("address", address || "");
   if (photoFile) fd.append("photo", photoFile);
 
   setLoading("submitTreeBtn", true);
@@ -274,7 +307,7 @@ async function submitTree() {
     if (tempMarker) { map.removeLayer(tempMarker); tempMarker = null; }
 
     // reset form
-    ["pinLat","pinLng","treeNotes","estKg"].forEach(id => document.getElementById(id).value = "");
+    ["pinLat","pinLng","treeNotes","estKg","pinAddress"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("treePhoto").value = "";
 
     closePanel("reportPanel");
@@ -310,7 +343,7 @@ function openTreePanel(treeId) {
       <span class="tree-status-chip ${statusClass}">${capitalise(tree.status)}</span>
     </div>
     ${tree.notes ? `<p class="tree-notes">"${tree.notes}"</p>` : ""}
-    <div style="font-size:0.8rem;color:var(--text-muted)">Reported by ${tree.reportedByName} · ${timeSince(tree.reportedAt)}</div>
+    <div style="font-size:0.8rem;color:var(--text-muted)">Reported by ${tree.reportedByName} · ${timeSince(tree.reportedAt)}${tree.address ? `<br/>📍 ${tree.address}` : ""}</div>
 
     <div class="tree-pickup-form">
       <h3 style="font-family:'Fraunces',serif;font-size:1rem;color:var(--text-sub)">Log a Pickup</h3>
@@ -442,6 +475,7 @@ function setupNavButtons() {
       else if (view === "mytrees") openMyTrees();
       else if (view === "leaderboard") openLeaderboard();
       else if (view === "profile") { updateProfilePanel(); openPanel("profilePanel"); }
+      else if (view === "contact") openPanel("contactPanel");
     });
   });
 }
@@ -454,6 +488,8 @@ function setupPanelCloses() {
     ["closeProfile", "profilePanel"],
     ["closeLeaderboard", "leaderboardPanel"],
     ["closeMyTrees", "myTreesPanel"],
+    ["closeContact", "contactPanel"],
+    ["closeAdmin", "adminPanel"],
   ];
   pairs.forEach(([btnId, panelId]) => {
     document.getElementById(btnId).addEventListener("click", () => closePanel(panelId));
@@ -526,6 +562,38 @@ function showToast(msg) {
   t.classList.add("show");
   setTimeout(() => t.classList.remove("show"), 3000);
 }
+
+// ==================== ADMIN ====================
+function openAdminPanel() {
+  document.getElementById("adminTreesList").innerHTML = allTrees.length === 0
+    ? `<p style="color:var(--text-muted);text-align:center">No trees on the map yet.</p>`
+    : allTrees.map(t => `
+        <div class="my-tree-card" style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div class="my-tree-header">
+              <span class="my-tree-type">${getFruitEmoji(t.type)} ${capitalise(t.type)}</span>
+              <span class="my-tree-date">${timeSince(t.reportedAt)}</span>
+            </div>
+            <div class="my-tree-notes">by ${t.reportedByName} · ${t.address || "No address"}</div>
+          </div>
+          <button onclick="deleteTree('${t.id}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:6px 12px;font-size:0.8rem;cursor:pointer;flex-shrink:0;margin-left:10px;">🗑 Delete</button>
+        </div>
+      `).join("");
+  openPanel("adminPanel");
+}
+
+async function deleteTree(treeId) {
+  if (!confirm("Delete this tree from the map?")) return;
+  try {
+    const res = await apiFetch(`/api/trees/${treeId}`, { method: "DELETE" });
+    if (!res.ok) { showToast("Failed to delete tree"); return; }
+    allTrees = allTrees.filter(t => t.id !== treeId);
+    if (markers[treeId]) { map.removeLayer(markers[treeId]); delete markers[treeId]; }
+    showToast("🗑 Tree deleted!");
+    openAdminPanel();
+  } catch { showToast("Error deleting tree"); }
+}
+window.deleteTree = deleteTree;
 
 // ==================== AI FRUIT CHECKER ====================
 document.getElementById("treePhoto").addEventListener("change", (e) => {
