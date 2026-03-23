@@ -37,6 +37,8 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
+const ADMIN_EMAIL = "akhilakella@outlook.com";
+
 // -------------------- Auth Middleware --------------------
 function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.split(" ")[1];
@@ -47,6 +49,11 @@ function authMiddleware(req, res, next) {
   } catch {
     res.status(401).json({ error: "Invalid token" });
   }
+}
+
+function adminMiddleware(req, res, next) {
+  if (req.user.email !== ADMIN_EMAIL) return res.status(403).json({ error: "Admin only" });
+  next();
 }
 
 // -------------------- Auth Routes --------------------
@@ -133,7 +140,7 @@ app.get("/api/trees", async (req, res) => {
 
 app.post("/api/trees", authMiddleware, upload.single("photo"), async (req, res) => {
   try {
-    const { lat, lng, type, landType, notes, estimatedKg } = req.body;
+    const { lat, lng, type, landType, notes, estimatedKg, address } = req.body;
     if (!lat || !lng || !type) return res.status(400).json({ error: "lat, lng and type required" });
 
     const id = uuidv4();
@@ -141,6 +148,7 @@ app.post("/api/trees", authMiddleware, upload.single("photo"), async (req, res) 
       id, lat: parseFloat(lat), lng: parseFloat(lng),
       type, landType: landType || "unknown",
       notes: notes || "",
+      address: address || "",
       estimatedKg: parseFloat(estimatedKg) || 0,
       status: "active", // active | picked | rotten
       photo: req.file ? `/uploads/${req.file.filename}` : null,
@@ -197,6 +205,22 @@ app.patch("/api/trees/:id/status", authMiddleware, async (req, res) => {
     tree.status = req.body.status || tree.status;
     await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
     res.json(tree);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// -------------------- Admin Routes --------------------
+app.get("/api/admin/check", authMiddleware, (req, res) => {
+  res.json({ isAdmin: req.user.email === ADMIN_EMAIL });
+});
+
+app.delete("/api/trees/:id", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const raw = await redis.get(`tree:${req.params.id}`);
+    if (!raw) return res.status(404).json({ error: "Tree not found" });
+    await redis.del(`tree:${req.params.id}`);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
