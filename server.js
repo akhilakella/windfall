@@ -277,18 +277,15 @@ app.post("/api/reset-password", async (req, res) => {
   }
 });
 
-// Change password
+// Change password (logged in user - no current password needed)
 app.post("/api/change-password", authMiddleware, async (req, res) => {
   try {
-    const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) return res.status(400).json({ error: "All fields required" });
-    if (newPassword.length < 6) return res.status(400).json({ error: "New password must be at least 6 characters" });
+    const { newPassword } = req.body;
+    if (!newPassword) return res.status(400).json({ error: "New password required" });
+    if (newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
 
     const user = JSON.parse(await redis.get(`user:${req.user.id}`));
     if (!user) return res.status(404).json({ error: "User not found" });
-
-    const match = await bcrypt.compare(currentPassword, user.password);
-    if (!match) return res.status(401).json({ error: "Current password is incorrect" });
 
     user.password = await bcrypt.hash(newPassword, 10);
     await redis.set(`user:${req.user.id}`, JSON.stringify(user));
