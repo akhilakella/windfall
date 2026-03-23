@@ -723,6 +723,100 @@ async function deleteTree(treeId) {
   } catch { showToast("Error deleting tree"); }
 }
 window.deleteTree = deleteTree;
+
+// ==================== FORGOT / RESET PASSWORD ====================
+document.getElementById("forgotPassBtn").addEventListener("click", () => {
+  document.getElementById("authScreen").classList.remove("active");
+  document.getElementById("forgotScreen").classList.add("active");
+});
+
+document.getElementById("backToLoginBtn").addEventListener("click", () => {
+  document.getElementById("forgotScreen").classList.remove("active");
+  document.getElementById("authScreen").classList.add("active");
+});
+
+document.getElementById("sendResetBtn").addEventListener("click", async () => {
+  const email = document.getElementById("forgotEmail").value.trim();
+  if (!email) { showForgotMsg("Please enter your email.", false); return; }
+  document.getElementById("sendResetBtn").disabled = true;
+  document.getElementById("sendResetBtn").textContent = "Sending...";
+  try {
+    await fetch("/api/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    showForgotMsg("If that email is registered, a reset link is on its way! Check your inbox.", true);
+  } catch {
+    showForgotMsg("Something went wrong. Please try again.", false);
+  } finally {
+    document.getElementById("sendResetBtn").disabled = false;
+    document.getElementById("sendResetBtn").textContent = "📧 Send Reset Link";
+  }
+});
+
+function showForgotMsg(text, success) {
+  const el = document.getElementById("forgotMsg");
+  el.textContent = text;
+  el.style.background = success ? "rgba(76,175,80,0.15)" : "rgba(192,57,43,0.15)";
+  el.style.border = success ? "1px solid rgba(76,175,80,0.4)" : "1px solid rgba(192,57,43,0.4)";
+  el.style.color = success ? "#81c784" : "#ff8a7a";
+  el.classList.remove("hidden");
+}
+
+function checkResetToken() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
+  if (token) {
+    document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+    document.getElementById("resetScreen").classList.add("active");
+    window._resetToken = token;
+  }
+}
+checkResetToken();
+
+document.getElementById("doResetBtn").addEventListener("click", async () => {
+  const newPass = document.getElementById("resetNewPass").value;
+  const confirmPass = document.getElementById("resetConfirmPass").value;
+  if (!newPass || !confirmPass) { showResetMsg("Please fill in both fields.", false); return; }
+  if (newPass.length < 6) { showResetMsg("Password must be at least 6 characters.", false); return; }
+  if (newPass !== confirmPass) { showResetMsg("Passwords don't match!", false); return; }
+  document.getElementById("doResetBtn").disabled = true;
+  document.getElementById("doResetBtn").textContent = "Saving...";
+  try {
+    const res = await fetch("/api/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: window._resetToken, newPassword: newPass })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showResetMsg("Password updated! You can now sign in.", true);
+      setTimeout(() => {
+        document.getElementById("resetScreen").classList.remove("active");
+        document.getElementById("authScreen").classList.add("active");
+        window.history.replaceState({}, "", "/");
+      }, 2000);
+    } else {
+      showResetMsg(data.error || "Reset failed. The link may have expired.", false);
+    }
+  } catch {
+    showResetMsg("Something went wrong. Please try again.", false);
+  } finally {
+    document.getElementById("doResetBtn").disabled = false;
+    document.getElementById("doResetBtn").textContent = "🔑 Set New Password";
+  }
+});
+
+function showResetMsg(text, success) {
+  const el = document.getElementById("resetMsg");
+  el.textContent = text;
+  el.style.background = success ? "rgba(76,175,80,0.15)" : "rgba(192,57,43,0.15)";
+  el.style.border = success ? "1px solid rgba(76,175,80,0.4)" : "1px solid rgba(192,57,43,0.4)";
+  el.style.color = success ? "#81c784" : "#ff8a7a";
+  el.classList.remove("hidden");
+}
+
 document.getElementById("treePhoto").addEventListener("change", (e) => {
   const btn = document.getElementById("aiCheckBtn");
   const result = document.getElementById("aiResult");
