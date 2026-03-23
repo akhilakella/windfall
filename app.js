@@ -612,6 +612,7 @@ function setupAdminTabs() {
       if (tabName === "analytics") loadAdminAnalytics();
       if (tabName === "trees") loadAdminTrees();
       if (tabName === "announce") loadCurrentAnnouncement();
+      if (tabName === "danger") loadAdminUsers();
     });
   });
 
@@ -717,7 +718,34 @@ async function saveEditTree(treeId) {
 }
 window.saveEditTree = saveEditTree;
 
-async function loadCurrentAnnouncement() {
+async function loadAdminUsers() {
+  try {
+    const res = await apiFetch("/api/admin/users");
+    const users = await res.json();
+    document.getElementById("adminUsersList").innerHTML = users.length === 0
+      ? `<p style="color:var(--text-muted);font-size:0.85rem">No users yet</p>`
+      : users.map(u => `
+          <div class="my-tree-card" style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div class="my-tree-type" style="font-size:0.9rem;">${u.name}</div>
+              <div class="my-tree-notes">${u.email} · ${u.kgRescued.toFixed(1)}kg · ${u.treesReported} trees</div>
+            </div>
+            ${u.email !== "akhilakella@outlook.com" ? `
+            <button onclick="deleteUser('${u.id}', '${u.name}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;flex-shrink:0;margin-left:10px;">🗑</button>
+            ` : `<span style="font-size:0.75rem;color:var(--gold);flex-shrink:0;">👑 Admin</span>`}
+          </div>`).join("");
+  } catch { showToast("Could not load users"); }
+}
+
+async function deleteUser(userId, userName) {
+  if (!confirm(`Delete user "${userName}"? This cannot be undone!`)) return;
+  try {
+    const res = await apiFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+    if (res.ok) { showToast(`🗑 ${userName} deleted`); loadAdminUsers(); }
+    else showToast("Failed to delete user");
+  } catch { showToast("Error deleting user"); }
+}
+window.deleteUser = deleteUser;
   try {
     const res = await fetch("/api/announcement");
     const data = await res.json();
