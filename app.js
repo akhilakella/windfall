@@ -1,15 +1,12 @@
 // ============================================================
 // WINDFALL — app.js
 // ============================================================
-
-const API = "";
 let token = localStorage.getItem("wf_token");
 let currentUser = null;
 let isAdmin = false;
 let map = null;
 let markers = {};
 let tempMarker = null;
-let pickingPin = false;
 let allTrees = [];
 
 // ==================== INIT ====================
@@ -23,33 +20,27 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupLeaderboardBtn();
   setupProfileBtn();
   setupAdminTabs();
+  checkResetToken();
   loadAnnouncement();
 
   if (token) {
     try {
       const res = await apiFetch("/api/me");
-      if (res.ok) {
-        currentUser = await res.json();
-        showApp();
-      } else {
-        localStorage.removeItem("wf_token");
-        token = null;
-      }
+      if (res.ok) { currentUser = await res.json(); showApp(); }
+      else { localStorage.removeItem("wf_token"); token = null; }
     } catch { localStorage.removeItem("wf_token"); token = null; }
   }
 });
 
 function registerSW() {
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
-  }
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
 
 // ==================== AUTH ====================
 function setupAuthTabs() {
-  document.querySelectorAll(".auth-tab").forEach(tab => {
+  document.querySelectorAll(".auth-tab:not([data-admin-tab])").forEach(tab => {
     tab.addEventListener("click", () => {
-      document.querySelectorAll(".auth-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".auth-tab:not([data-admin-tab])").forEach(t => t.classList.remove("active"));
       document.querySelectorAll(".auth-form").forEach(f => f.classList.remove("active"));
       tab.classList.add("active");
       document.getElementById(tab.dataset.tab + "Form").classList.add("active");
@@ -60,13 +51,9 @@ function setupAuthTabs() {
 function setupAuthForms() {
   document.getElementById("loginBtn").addEventListener("click", doLogin);
   document.getElementById("registerBtn").addEventListener("click", doRegister);
-
-  ["loginEmail", "loginPass", "regName", "regEmail", "regPass"].forEach(id => {
+  ["loginEmail","loginPass","regName","regEmail","regPass"].forEach(id => {
     document.getElementById(id).addEventListener("keydown", e => {
-      if (e.key === "Enter") {
-        if (id.startsWith("login")) doLogin();
-        else doRegister();
-      }
+      if (e.key === "Enter") { if (id.startsWith("login")) doLogin(); else doRegister(); }
     });
   });
 }
@@ -76,21 +63,21 @@ async function doLogin() {
   const err = document.getElementById("loginError");
   err.classList.add("hidden");
   if (!email || !pass) { showErr(err, "Please fill in all fields."); return; }
-
-  setLoading("loginBtn", true);
+  setLoading("loginBtn", true, "Sign In");
   try {
-    const res = await fetch("/api/login", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password: pass })
-    });
+    const res = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pass }) });
     const data = await res.json();
-    if (!res.ok) { showErr(err, data.error || "Login failed."); return; }
-    token = data.token;
-    currentUser = data.user;
+    if (res.status === 403 && data.error === "pending") {
+      document.getElementById("authScreen").classList.remove("active");
+      document.getElementById("pendingScreen").classList.add("active");
+      return;
+    }
+    if (!res.ok) { showErr(err, data.error || data.message || "Login failed."); return; }
+    token = data.token; currentUser = data.user;
     localStorage.setItem("wf_token", token);
     showApp();
   } catch { showErr(err, "Network error. Please try again."); }
-  finally { setLoading("loginBtn", false); }
+  finally { setLoading("loginBtn", false, "Sign In"); }
 }
 
 async function doRegister() {
@@ -99,31 +86,107 @@ async function doRegister() {
   err.classList.add("hidden");
   if (!name || !email || !pass) { showErr(err, "Please fill in all fields."); return; }
   if (pass.length < 6) { showErr(err, "Password must be at least 6 characters."); return; }
-
-  setLoading("registerBtn", true);
+  setLoading("registerBtn", true, "Request Access");
   try {
-    const res = await fetch("/api/register", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password: pass })
-    });
+    const res = await fetch("/api/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, password: pass }) });
     const data = await res.json();
     if (!res.ok) { showErr(err, data.error || "Registration failed."); return; }
-    token = data.token;
-    currentUser = data.user;
+    if (data.pending) {
+      document.getElementById("authScreen").classList.remove("active");
+      document.getElementById("pendingScreen").classList.add("active");
+      return;
+    }
+    // Admin registered directly
+    token = data.token; currentUser = data.user;
     localStorage.setItem("wf_token", token);
     showApp();
   } catch { showErr(err, "Network error. Please try again."); }
-  finally { setLoading("registerBtn", false); }
+  finally { setLoading("registerBtn", false, "Request Access"); }
 }
 
+document.getElementById("backFromPendingBtn").addEventListener("click", () => {
+  document.getElementById("pendingScreen").classList.remove("active");
+  document.getElementById("authScreen").classList.add("active");
+});
+
 document.getElementById("logoutBtn").addEventListener("click", () => {
-  token = null; currentUser = null;
+  token = null; currentUser = null; isAdmin = false;
   localStorage.removeItem("wf_token");
   closeAllPanels();
   document.getElementById("appScreen").classList.remove("active");
   document.getElementById("authScreen").classList.add("active");
+  const adminBtn = document.querySelector('[data-view="admin"]');
+  if (adminBtn) adminBtn.remove();
   showToast("Signed out 👋");
 });
+
+// ==================== FORGOT / RESET PASSWORD ====================
+document.getElementById("forgotPassBtn").addEventListener("click", () => {
+  document.getElementById("authScreen").classList.remove("active");
+  document.getElementById("forgotScreen").classList.add("active");
+});
+
+document.getElementById("backToLoginBtn").addEventListener("click", () => {
+  document.getElementById("forgotScreen").classList.remove("active");
+  document.getElementById("authScreen").classList.add("active");
+});
+
+document.getElementById("sendResetBtn").addEventListener("click", async () => {
+  const email = document.getElementById("forgotEmail").value.trim();
+  if (!email) { showForgotMsg("Please enter your email.", false); return; }
+  setLoading("sendResetBtn", true, "📧 Send Reset Link");
+  try {
+    await fetch("/api/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+    showForgotMsg("If that email is registered, a reset link is on its way! Check your inbox.", true);
+  } catch { showForgotMsg("Something went wrong. Please try again.", false); }
+  finally { setLoading("sendResetBtn", false, "📧 Send Reset Link"); }
+});
+
+function showForgotMsg(text, success) {
+  const el = document.getElementById("forgotMsg");
+  el.textContent = text;
+  el.style.background = success ? "rgba(76,175,80,0.15)" : "rgba(192,57,43,0.15)";
+  el.style.border = success ? "1px solid rgba(76,175,80,0.4)" : "1px solid rgba(192,57,43,0.4)";
+  el.style.color = success ? "#81c784" : "#ff8a7a";
+  el.classList.remove("hidden");
+}
+
+function checkResetToken() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
+  if (token) {
+    document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+    document.getElementById("resetScreen").classList.add("active");
+    window._resetToken = token;
+  }
+}
+
+document.getElementById("doResetBtn").addEventListener("click", async () => {
+  const newPass = document.getElementById("resetNewPass").value;
+  const confirmPass = document.getElementById("resetConfirmPass").value;
+  if (!newPass || !confirmPass) { showResetMsg("Please fill in both fields.", false); return; }
+  if (newPass.length < 6) { showResetMsg("Password must be at least 6 characters.", false); return; }
+  if (newPass !== confirmPass) { showResetMsg("Passwords don't match!", false); return; }
+  setLoading("doResetBtn", true, "🔑 Set New Password");
+  try {
+    const res = await fetch("/api/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: window._resetToken, newPassword: newPass }) });
+    const data = await res.json();
+    if (res.ok) {
+      showResetMsg("Password updated! You can now sign in.", true);
+      setTimeout(() => { document.getElementById("resetScreen").classList.remove("active"); document.getElementById("authScreen").classList.add("active"); window.history.replaceState({}, "", "/"); }, 2000);
+    } else { showResetMsg(data.error || "Reset failed. The link may have expired.", false); }
+  } catch { showResetMsg("Something went wrong.", false); }
+  finally { setLoading("doResetBtn", false, "🔑 Set New Password"); }
+});
+
+function showResetMsg(text, success) {
+  const el = document.getElementById("resetMsg");
+  el.textContent = text;
+  el.style.background = success ? "rgba(76,175,80,0.15)" : "rgba(192,57,43,0.15)";
+  el.style.border = success ? "1px solid rgba(76,175,80,0.4)" : "1px solid rgba(192,57,43,0.4)";
+  el.style.color = success ? "#81c784" : "#ff8a7a";
+  el.classList.remove("hidden");
+}
 
 // ==================== APP INIT ====================
 async function showApp() {
@@ -132,26 +195,21 @@ async function showApp() {
   initMap();
   loadTrees();
   updateProfilePanel();
-  // Check if admin
   try {
     const res = await apiFetch("/api/admin/check");
     const data = await res.json();
     isAdmin = data.isAdmin;
-    if (isAdmin) {
-      // Add admin button to nav
+    if (isAdmin && !document.querySelector('[data-view="admin"]')) {
       const nav = document.querySelector(".bottom-nav");
-      if (!document.querySelector('[data-view="admin"]')) {
-        const btn = document.createElement("button");
-        btn.className = "nav-btn";
-        btn.dataset.view = "admin";
-        btn.innerHTML = `<span class="nav-icon">🔧</span><span class="nav-label">Admin</span>`;
-        nav.appendChild(btn);
-        btn.addEventListener("click", () => {
-          document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
-          openAdminPanel();
-        });
-      }
+      const btn = document.createElement("button");
+      btn.className = "nav-btn"; btn.dataset.view = "admin";
+      btn.innerHTML = `<span class="nav-icon">🔧</span><span class="nav-label">Admin</span>`;
+      nav.appendChild(btn);
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        openAdminPanel();
+      });
     }
   } catch {}
 }
@@ -159,17 +217,9 @@ async function showApp() {
 // ==================== MAP ====================
 function initMap() {
   if (map) return;
-  // Rugby town centre coords
   map = L.map("map", { zoomControl: false }).setView([52.3704, -1.2655], 13);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap contributors",
-    maxZoom: 19,
-  }).addTo(map);
-
-  // Zoom control top-right
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap contributors", maxZoom: 19 }).addTo(map);
   L.control.zoom({ position: "bottomright" }).addTo(map);
-
-  // Click to pin
   map.on("click", (e) => {
     if (document.getElementById("reportPanel").classList.contains("open")) {
       document.getElementById("pinLat").value = e.latlng.lat.toFixed(6);
@@ -181,54 +231,19 @@ function initMap() {
 
 function placeTempMarker(lat, lng) {
   if (tempMarker) map.removeLayer(tempMarker);
-  const icon = L.divIcon({
-    className: "temp-pin",
-    html: `<div style="font-size:28px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5))">📍</div>`,
-    iconAnchor: [14, 28],
-  });
-  tempMarker = L.marker([lat, lng], { icon }).addTo(map);
+  tempMarker = L.marker([lat, lng], { icon: L.divIcon({ className: "temp-pin", html: `<div style="font-size:28px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5))">📍</div>`, iconAnchor: [14, 28] }) }).addTo(map);
 }
 
-function getStatusColor(status) {
-  if (status === "active") return "#4CAF50";
-  if (status === "picked") return "#3498db";
-  return "#e74c3c";
-}
-
-function getFruitEmoji(type) {
-  const map = { apple: "🍎", pear: "🍐", plum: "🟣", cherry: "🍒", other: "🌳" };
-  return map[type] || "🌳";
-}
+function getStatusColor(s) { return s === "active" ? "#4CAF50" : s === "picked" ? "#3498db" : "#e74c3c"; }
+function getFruitEmoji(t) { return ({ apple:"🍎", pear:"🍐", plum:"🟣", cherry:"🍒", other:"🌳" })[t] || "🌳"; }
 
 function addTreeMarker(tree) {
   if (markers[tree.id]) map.removeLayer(markers[tree.id]);
-
-  const color = getStatusColor(tree.status);
-  const emoji = getFruitEmoji(tree.type);
-
-  const icon = L.divIcon({
-    className: "temp-pin",
-    html: `<div style="
-      width:36px;height:36px;border-radius:50%;
-      background:${color}22;
-      border:2.5px solid ${color};
-      box-shadow:0 0 10px ${color}88;
-      display:flex;align-items:center;justify-content:center;
-      font-size:18px;cursor:pointer;
-    ">${emoji}</div>`,
-    iconAnchor: [18, 18],
-    popupAnchor: [0, -20],
-  });
-
+  const color = getStatusColor(tree.status), emoji = getFruitEmoji(tree.type);
+  const icon = L.divIcon({ className: "temp-pin", html: `<div style="width:36px;height:36px;border-radius:50%;background:${color}22;border:2.5px solid ${color};box-shadow:0 0 10px ${color}88;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;">${emoji}</div>`, iconAnchor: [18,18], popupAnchor: [0,-20] });
   const marker = L.marker([tree.lat, tree.lng], { icon }).addTo(map);
   const kgText = tree.estimatedKg > 0 ? `~${tree.estimatedKg}kg` : "";
-  marker.bindPopup(`
-    <div class="popup-title">${emoji} ${capitalise(tree.type)} Tree</div>
-    <div class="popup-sub">
-      ${kgText ? kgText + " · " : ""}${capitalise(tree.landType)} · by ${tree.reportedByName}
-    </div>
-    <button class="popup-btn" onclick="openTreePanel('${tree.id}')">View Details</button>
-  `);
+  marker.bindPopup(`<div class="popup-title">${emoji} ${capitalise(tree.type)} Tree</div><div class="popup-sub">${kgText ? kgText + " · " : ""}${capitalise(tree.landType)} · by ${tree.reportedByName}</div><button class="popup-btn" onclick="openTreePanel('${tree.id}')">View Details</button>`);
   markers[tree.id] = marker;
 }
 
@@ -240,12 +255,9 @@ async function loadTrees() {
   } catch { console.error("Could not load trees"); }
 }
 
-// ==================== FAB / REPORT PANEL ====================
+// ==================== FAB / REPORT ====================
 function setupFAB() {
-  document.getElementById("addTreeBtn").addEventListener("click", () => {
-    openPanel("reportPanel");
-    showToast("Tap the map to drop a pin 📍");
-  });
+  document.getElementById("addTreeBtn").addEventListener("click", () => { openPanel("reportPanel"); showToast("Tap the map to drop a pin 📍"); });
 
   document.getElementById("useLocationBtn").addEventListener("click", () => {
     if (!navigator.geolocation) { showToast("Geolocation not supported"); return; }
@@ -256,7 +268,6 @@ function setupFAB() {
       map.setView([lat, lng], 16);
       placeTempMarker(lat, lng);
       showToast("Location found! ✅");
-      // Reverse geocode
       try {
         const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
         const d = await r.json();
@@ -281,98 +292,66 @@ async function submitTree() {
   const photoFile = document.getElementById("treePhoto").files[0];
   const err = document.getElementById("reportError");
   err.classList.add("hidden");
-
   if (!lat || !lng) { showErr(err, "Please pick a location on the map or use your GPS."); return; }
-
   const fd = new FormData();
-  fd.append("lat", lat);
-  fd.append("lng", lng);
-  fd.append("type", type);
-  fd.append("landType", landType);
-  fd.append("notes", notes);
-  fd.append("estimatedKg", estKg || 0);
-  fd.append("address", address || "");
+  fd.append("lat", lat); fd.append("lng", lng); fd.append("type", type);
+  fd.append("landType", landType); fd.append("notes", notes);
+  fd.append("estimatedKg", estKg || 0); fd.append("address", address || "");
   if (photoFile) fd.append("photo", photoFile);
-
-  setLoading("submitTreeBtn", true);
+  setLoading("submitTreeBtn", true, "Drop Pin 📍");
   try {
-    const res = await fetch("/api/trees", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: fd,
-    });
+    const res = await fetch("/api/trees", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
     const tree = await res.json();
     if (!res.ok) { showErr(err, tree.error || "Failed to submit."); return; }
-
     allTrees.push(tree);
     addTreeMarker(tree);
     if (tempMarker) { map.removeLayer(tempMarker); tempMarker = null; }
-
-    // reset form
     ["pinLat","pinLng","treeNotes","estKg","pinAddress"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("treePhoto").value = "";
-
     closePanel("reportPanel");
     showToast(`${getFruitEmoji(tree.type)} Tree pinned! Thanks for rescuing fruit! 🌿`);
-
-    // Update user stats
     currentUser.treesReported = (currentUser.treesReported || 0) + 1;
     updateProfilePanel();
   } catch { showErr(err, "Network error."); }
-  finally { setLoading("submitTreeBtn", false); }
+  finally { setLoading("submitTreeBtn", false, "Drop Pin 📍"); }
 }
 
-// ==================== TREE DETAIL PANEL ====================
+// ==================== TREE DETAIL ====================
 function openTreePanel(treeId) {
   const tree = allTrees.find(t => t.id === treeId);
   if (!tree) return;
   map.closePopup();
-
   const emoji = getFruitEmoji(tree.type);
   document.getElementById("treePanelTitle").textContent = `${emoji} ${capitalise(tree.type)} Tree`;
-
-  const pickupList = (tree.pickups || []).map(p =>
-    `<div class="pickup-row"><span>${p.byName}</span><span>${p.kg}kg · ${timeSince(p.at)}</span></div>`
-  ).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet — be the first!</p>";
-
-  const statusClass = `status-${tree.status}`;
+  const pickupList = (tree.pickups || []).map(p => `<div class="pickup-row"><span>${p.byName}</span><span>${p.kg}kg · ${timeSince(p.at)}</span></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet — be the first!</p>";
   document.getElementById("treePanelBody").innerHTML = `
     ${tree.photo ? `<img src="${tree.photo}" class="tree-detail-photo" alt="Tree photo" />` : ""}
     <div class="tree-meta">
       <span class="tree-chip">${emoji} ${capitalise(tree.type)}</span>
       <span class="tree-chip">📍 ${capitalise(tree.landType)}</span>
       ${tree.estimatedKg > 0 ? `<span class="tree-chip">~${tree.estimatedKg}kg</span>` : ""}
-      <span class="tree-status-chip ${statusClass}">${capitalise(tree.status)}</span>
+      <span class="tree-status-chip status-${tree.status}">${capitalise(tree.status)}</span>
     </div>
     ${tree.notes ? `<p class="tree-notes">"${tree.notes}"</p>` : ""}
     <div style="font-size:0.8rem;color:var(--text-muted)">Reported by ${tree.reportedByName} · ${timeSince(tree.reportedAt)}${tree.address ? `<br/>📍 ${tree.address}` : ""}</div>
-
     <div class="tree-pickup-form">
       <h3 style="font-family:'Fraunces',serif;font-size:1rem;color:var(--text-sub)">Log a Pickup</h3>
       <input type="number" id="pickupKg" placeholder="How many kg did you rescue?" min="0" step="0.5" />
       <button class="btn-primary btn-sm" onclick="logPickup('${tree.id}')">✅ Log Pickup</button>
     </div>
-
     <div>
       <h3 style="font-family:'Fraunces',serif;font-size:1rem;color:var(--text-sub);margin-bottom:8px">Pickup History</h3>
       <div class="pickup-history">${pickupList}</div>
-    </div>
-  `;
-
+    </div>`;
   openPanel("treePanel");
 }
-
 window.openTreePanel = openTreePanel;
 
 async function logPickup(treeId) {
   const kg = parseFloat(document.getElementById("pickupKg").value) || 0;
   if (kg <= 0) { showToast("Enter how many kg you rescued!"); return; }
-
   try {
-    const res = await apiFetch(`/api/trees/${treeId}/pickup`, {
-      method: "PATCH",
-      body: JSON.stringify({ kg }),
-    });
+    const res = await apiFetch(`/api/trees/${treeId}/pickup`, { method: "PATCH", body: JSON.stringify({ kg }) });
     const updated = await res.json();
     const idx = allTrees.findIndex(t => t.id === treeId);
     if (idx !== -1) allTrees[idx] = updated;
@@ -384,36 +363,24 @@ async function logPickup(treeId) {
     updateProfilePanel();
   } catch { showToast("Failed to log pickup"); }
 }
-
 window.logPickup = logPickup;
 
-// ==================== PROFILE PANEL ====================
+// ==================== PROFILE ====================
 function setupProfileBtn() {
   document.getElementById("profileBtn").addEventListener("click", () => openPanel("profilePanel"));
-
   document.getElementById("changePassBtn").addEventListener("click", async () => {
     const newPass = document.getElementById("newPass").value;
     const confirmPass = document.getElementById("confirmNewPass").value;
     const msg = document.getElementById("changePassMsg");
     msg.classList.add("hidden");
-
     if (!newPass || !confirmPass) { showPassMsg("Please fill in both fields.", false); return; }
     if (newPass.length < 6) { showPassMsg("Password must be at least 6 characters.", false); return; }
     if (newPass !== confirmPass) { showPassMsg("Passwords don't match!", false); return; }
-
     try {
-      const res = await apiFetch("/api/change-password", {
-        method: "POST",
-        body: JSON.stringify({ newPassword: newPass })
-      });
+      const res = await apiFetch("/api/change-password", { method: "POST", body: JSON.stringify({ newPassword: newPass }) });
       const data = await res.json();
-      if (res.ok) {
-        showPassMsg("✅ Password updated!", true);
-        document.getElementById("newPass").value = "";
-        document.getElementById("confirmNewPass").value = "";
-      } else {
-        showPassMsg(data.error || "Failed to update password.", false);
-      }
+      if (res.ok) { showPassMsg("✅ Password updated!", true); document.getElementById("newPass").value = ""; document.getElementById("confirmNewPass").value = ""; }
+      else { showPassMsg(data.error || "Failed to update password.", false); }
     } catch { showPassMsg("Something went wrong.", false); }
   });
 }
@@ -434,25 +401,10 @@ function updateProfilePanel() {
   document.getElementById("statKg").textContent = (currentUser.kgRescued || 0).toFixed(1);
   document.getElementById("statTrees").textContent = currentUser.treesReported || 0;
   document.getElementById("statPickups").textContent = currentUser.pickups || 0;
-
-  const badgeMap = {
-    "tree-scout": ["🌱", "Tree Scout"],
-    "orchard-mapper": ["🗺️", "Orchard Mapper"],
-    "apple-saver": ["🍎", "Apple Saver"],
-    "horse-hero": ["🐴", "Horse Hero"],
-    "windfall-legend": ["👑", "Windfall Legend"],
-    "gleaner": ["🧺", "Gleaner"],
-  };
+  const badgeMap = { "tree-scout":["🌱","Tree Scout"], "orchard-mapper":["🗺️","Orchard Mapper"], "apple-saver":["🍎","Apple Saver"], "horse-hero":["🐴","Horse Hero"], "windfall-legend":["👑","Windfall Legend"], "gleaner":["🧺","Gleaner"] };
   const bc = document.getElementById("badgesContainer");
   const badges = currentUser.badges || [];
-  if (badges.length === 0) {
-    bc.innerHTML = `<p class="no-badges">Report your first tree to earn a badge! 🌱</p>`;
-  } else {
-    bc.innerHTML = badges.map(b => {
-      const [icon, name] = badgeMap[b] || ["⭐", b];
-      return `<div class="badge">${icon} ${name}</div>`;
-    }).join("");
-  }
+  bc.innerHTML = badges.length === 0 ? `<p class="no-badges">Report your first tree to earn a badge! 🌱</p>` : badges.map(b => { const [icon, name] = badgeMap[b] || ["⭐", b]; return `<div class="badge">${icon} ${name}</div>`; }).join("");
 }
 
 // ==================== LEADERBOARD ====================
@@ -464,19 +416,10 @@ async function openLeaderboard() {
   try {
     const res = await fetch("/api/leaderboard");
     const data = await res.json();
-    const medals = ["gold", "silver", "bronze"];
+    const medals = ["gold","silver","bronze"];
     document.getElementById("leaderboardList").innerHTML = data.length === 0
       ? `<p style="color:var(--text-muted);text-align:center">No rescuers yet — be first! 🍎</p>`
-      : data.map((u, i) => `
-          <div class="leader-row">
-            <div class="leader-rank ${medals[i] || ""}">${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</div>
-            <div class="leader-info">
-              <div class="leader-name">${u.name}</div>
-              <div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div>
-            </div>
-            <div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div>
-          </div>
-        `).join("");
+      : data.map((u, i) => `<div class="leader-row"><div class="leader-rank ${medals[i]||""}">${i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div><div class="leader-info"><div class="leader-name">${u.name}</div><div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div></div><div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div></div>`).join("");
     openPanel("leaderboardPanel");
   } catch { showToast("Could not load rankings"); }
 }
@@ -486,18 +429,9 @@ function openMyTrees() {
   const mine = allTrees.filter(t => t.reportedBy === currentUser.id);
   document.getElementById("myTreesList").innerHTML = mine.length === 0
     ? `<p style="color:var(--text-muted);text-align:center">You haven't reported any trees yet!<br><br>Tap the ＋ button to get started. 🌱</p>`
-    : mine.map(t => `
-        <div class="my-tree-card" onclick="openTreePanel('${t.id}');closePanel('myTreesPanel')">
-          <div class="my-tree-header">
-            <span class="my-tree-type">${getFruitEmoji(t.type)} ${capitalise(t.type)} Tree</span>
-            <span class="my-tree-date">${timeSince(t.reportedAt)}</span>
-          </div>
-          <div class="my-tree-notes">${t.notes || "No notes"}</div>
-        </div>
-      `).join("");
+    : mine.map(t => `<div class="my-tree-card" onclick="openTreePanel('${t.id}');closePanel('myTreesPanel')"><div class="my-tree-header"><span class="my-tree-type">${getFruitEmoji(t.type)} ${capitalise(t.type)} Tree</span><span class="my-tree-date">${timeSince(t.reportedAt)}</span></div><div class="my-tree-notes">${t.notes || "No notes"}</div></div>`).join("");
   openPanel("myTreesPanel");
 }
-
 window.openMyTrees = openMyTrees;
 
 // ==================== NAV ====================
@@ -508,7 +442,7 @@ function setupNavButtons() {
       btn.classList.add("active");
       const view = btn.dataset.view;
       closeAllPanels();
-      if (view === "map") { /* already shown */ }
+      if (view === "map") {}
       else if (view === "mytrees") openMyTrees();
       else if (view === "leaderboard") openLeaderboard();
       else if (view === "profile") { updateProfilePanel(); openPanel("profilePanel"); }
@@ -519,86 +453,16 @@ function setupNavButtons() {
 
 // ==================== PANELS ====================
 function setupPanelCloses() {
-  const pairs = [
-    ["closeReport", "reportPanel"],
-    ["closeTree", "treePanel"],
-    ["closeProfile", "profilePanel"],
-    ["closeLeaderboard", "leaderboardPanel"],
-    ["closeMyTrees", "myTreesPanel"],
-    ["closeContact", "contactPanel"],
-    ["closeAdmin", "adminPanel"],
-  ];
-  pairs.forEach(([btnId, panelId]) => {
+  [["closeReport","reportPanel"],["closeTree","treePanel"],["closeProfile","profilePanel"],["closeLeaderboard","leaderboardPanel"],["closeMyTrees","myTreesPanel"],["closeContact","contactPanel"],["closeAdmin","adminPanel"]].forEach(([btnId, panelId]) => {
     document.getElementById(btnId).addEventListener("click", () => closePanel(panelId));
   });
   document.getElementById("overlay").addEventListener("click", closeAllPanels);
 }
 
-function openPanel(id) {
-  closeAllPanels();
-  document.getElementById(id).classList.add("open");
-  document.getElementById("overlay").classList.remove("hidden");
-}
-
-function closePanel(id) {
-  document.getElementById(id).classList.remove("open");
-  document.getElementById("overlay").classList.add("hidden");
-}
-
-function closeAllPanels() {
-  document.querySelectorAll(".panel").forEach(p => p.classList.remove("open"));
-  document.getElementById("overlay").classList.add("hidden");
-}
-
+function openPanel(id) { closeAllPanels(); document.getElementById(id).classList.add("open"); document.getElementById("overlay").classList.remove("hidden"); }
+function closePanel(id) { document.getElementById(id).classList.remove("open"); document.getElementById("overlay").classList.add("hidden"); }
+function closeAllPanels() { document.querySelectorAll(".panel").forEach(p => p.classList.remove("open")); document.getElementById("overlay").classList.add("hidden"); }
 window.closePanel = closePanel;
-
-// ==================== HELPERS ====================
-async function apiFetch(url, opts = {}) {
-  return fetch(url, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(opts.headers || {}),
-    },
-    body: opts.body,
-  });
-}
-
-function val(id) { return document.getElementById(id).value.trim(); }
-
-function showErr(el, msg) {
-  el.textContent = msg;
-  el.classList.remove("hidden");
-}
-
-function setLoading(id, loading) {
-  const btn = document.getElementById(id);
-  btn.disabled = loading;
-  btn.textContent = loading ? "Please wait…" : btn.dataset.label || btn.textContent;
-  if (!loading && !btn.dataset.label) return;
-  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
-}
-
-function capitalise(str) {
-  if (!str) return "";
-  return str.charAt(0).toUpperCase() + str.slice(1).replace(/-/g, " ");
-}
-
-function timeSince(ts) {
-  const secs = Math.floor((Date.now() - ts) / 1000);
-  if (secs < 60) return "just now";
-  if (secs < 3600) return Math.floor(secs / 60) + "m ago";
-  if (secs < 86400) return Math.floor(secs / 3600) + "h ago";
-  return Math.floor(secs / 86400) + "d ago";
-}
-
-function showToast(msg) {
-  const t = document.getElementById("toast");
-  t.textContent = msg;
-  t.classList.add("show");
-  setTimeout(() => t.classList.remove("show"), 3000);
-}
 
 // ==================== ADMIN ====================
 function setupAdminTabs() {
@@ -607,17 +471,18 @@ function setupAdminTabs() {
       document.querySelectorAll("[data-admin-tab]").forEach(t => t.classList.remove("active"));
       document.querySelectorAll(".admin-tab-content").forEach(c => c.style.display = "none");
       tab.classList.add("active");
-      const tabName = tab.dataset.adminTab;
-      document.getElementById(`adminTab-${tabName}`).style.display = "flex";
-      if (tabName === "analytics") loadAdminAnalytics();
-      if (tabName === "trees") loadAdminTrees();
-      if (tabName === "announce") loadCurrentAnnouncement();
-      if (tabName === "danger") loadAdminUsers();
+      const name = tab.dataset.adminTab;
+      document.getElementById(`adminTab-${name}`).style.display = "flex";
+      if (name === "requests") loadAdminRequests();
+      if (name === "analytics") loadAdminAnalytics();
+      if (name === "trees") loadAdminTrees();
+      if (name === "announce") loadCurrentAnnouncement();
+      if (name === "danger") loadAdminUsers();
     });
   });
 
   document.getElementById("resetStatsBtn").addEventListener("click", async () => {
-    if (!confirm("Reset ALL users' stats? This cannot be undone!")) return;
+    if (!confirm("Reset ALL users stats? Cannot be undone!")) return;
     try {
       const res = await apiFetch("/api/admin/reset-stats", { method: "POST" });
       if (res.ok) { showToast("✅ All stats reset!"); currentUser.kgRescued = 0; currentUser.pickups = 0; currentUser.treesReported = 0; currentUser.badges = []; updateProfilePanel(); }
@@ -636,8 +501,10 @@ function setupAdminTabs() {
 
   document.getElementById("clearAnnouncementBtn").addEventListener("click", async () => {
     try {
-      const res = await apiFetch("/api/admin/announcement", { method: "POST", body: JSON.stringify({ message: "" }) });
-      if (res.ok) { showToast("Notice cleared!"); document.getElementById("announcementBanner").classList.add("hidden"); document.getElementById("announcementText").value = ""; }
+      await apiFetch("/api/admin/announcement", { method: "POST", body: JSON.stringify({ message: "" }) });
+      document.getElementById("announcementBanner").classList.add("hidden");
+      document.getElementById("announcementText").value = "";
+      showToast("Notice cleared!");
     } catch { showToast("Error clearing notice"); }
   });
 
@@ -645,6 +512,45 @@ function setupAdminTabs() {
     document.getElementById("announcementBanner").classList.add("hidden");
   });
 }
+
+async function loadAdminRequests() {
+  try {
+    const res = await apiFetch("/api/admin/requests");
+    const data = await res.json();
+    document.getElementById("adminRequestsList").innerHTML = data.length === 0
+      ? `<p style="color:var(--text-muted);font-size:0.85rem;text-align:center;">No pending requests 🎉</p>`
+      : data.map(u => `
+          <div class="my-tree-card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+            <div>
+              <div class="my-tree-type" style="font-size:0.9rem;">${u.name}</div>
+              <div class="my-tree-notes">${u.email} · ${timeSince(u.joinedAt)}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button onclick="approveUser('${u.id}')" style="background:rgba(76,175,80,0.2);border:1px solid rgba(76,175,80,0.4);color:#81c784;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✅ Approve</button>
+              <button onclick="rejectUser('${u.id}', '${u.name}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✕ Reject</button>
+            </div>
+          </div>`).join("");
+  } catch { showToast("Could not load requests"); }
+}
+
+async function approveUser(userId) {
+  try {
+    const res = await apiFetch(`/api/admin/approve/${userId}`, { method: "POST" });
+    if (res.ok) { showToast("✅ User approved!"); loadAdminRequests(); }
+    else showToast("Failed to approve user");
+  } catch { showToast("Error approving user"); }
+}
+window.approveUser = approveUser;
+
+async function rejectUser(userId, userName) {
+  if (!confirm(`Reject and delete "${userName}"?`)) return;
+  try {
+    const res = await apiFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+    if (res.ok) { showToast(`🗑 ${userName} rejected`); loadAdminRequests(); }
+    else showToast("Failed to reject user");
+  } catch { showToast("Error rejecting user"); }
+}
+window.rejectUser = rejectUser;
 
 async function loadAdminAnalytics() {
   try {
@@ -655,21 +561,13 @@ async function loadAdminAnalytics() {
     document.getElementById("aStat-users").textContent = data.totalUsers || 0;
     document.getElementById("adminTopUsers").innerHTML = (data.topUsers || []).length === 0
       ? `<p style="color:var(--text-muted);font-size:0.85rem">No users yet</p>`
-      : data.topUsers.map((u, i) => `
-          <div class="leader-row">
-            <div class="leader-rank">${i + 1}</div>
-            <div class="leader-info">
-              <div class="leader-name">${u.name}</div>
-              <div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div>
-            </div>
-            <div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div>
-          </div>`).join("");
+      : data.topUsers.map((u, i) => `<div class="leader-row"><div class="leader-rank">${i+1}</div><div class="leader-info"><div class="leader-name">${u.name}</div><div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div></div><div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div></div>`).join("");
   } catch { showToast("Could not load analytics"); }
 }
 
 function loadAdminTrees() {
   document.getElementById("adminTreesList").innerHTML = allTrees.length === 0
-    ? `<p style="color:var(--text-muted);text-align:center">No trees on the map yet.</p>`
+    ? `<p style="color:var(--text-muted);text-align:center">No trees yet.</p>`
     : allTrees.map(t => `
         <div class="my-tree-card">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
@@ -683,9 +581,9 @@ function loadAdminTrees() {
             </div>
           </div>
           <div id="editForm-${t.id}" style="display:none;flex-direction:column;gap:8px;margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
-            <input type="text" id="editNotes-${t.id}" value="${t.notes || ""}" placeholder="Notes" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
-            <input type="text" id="editAddress-${t.id}" value="${t.address || ""}" placeholder="Address" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
-            <input type="number" id="editKg-${t.id}" value="${t.estimatedKg || 0}" placeholder="Estimated kg" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
+            <input type="text" id="editNotes-${t.id}" value="${t.notes||""}" placeholder="Notes" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
+            <input type="text" id="editAddress-${t.id}" value="${t.address||""}" placeholder="Address" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
+            <input type="number" id="editKg-${t.id}" value="${t.estimatedKg||0}" placeholder="Estimated kg" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
             <button onclick="saveEditTree('${t.id}')" class="btn-primary btn-sm">💾 Save</button>
           </div>
         </div>`).join("");
@@ -702,43 +600,42 @@ async function saveEditTree(treeId) {
   const address = document.getElementById(`editAddress-${treeId}`).value;
   const estimatedKg = document.getElementById(`editKg-${treeId}`).value;
   try {
-    const res = await apiFetch(`/api/admin/trees/${treeId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ notes, address, estimatedKg })
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      const idx = allTrees.findIndex(t => t.id === treeId);
-      if (idx !== -1) allTrees[idx] = updated;
-      addTreeMarker(updated);
-      showToast("✅ Tree updated!");
-      loadAdminTrees();
-    } else showToast("Failed to update tree");
+    const res = await apiFetch(`/api/admin/trees/${treeId}`, { method: "PATCH", body: JSON.stringify({ notes, address, estimatedKg }) });
+    if (res.ok) { const updated = await res.json(); const idx = allTrees.findIndex(t => t.id === treeId); if (idx !== -1) allTrees[idx] = updated; addTreeMarker(updated); showToast("✅ Tree updated!"); loadAdminTrees(); }
+    else showToast("Failed to update tree");
   } catch { showToast("Error updating tree"); }
 }
 window.saveEditTree = saveEditTree;
+
+async function deleteTree(treeId) {
+  if (!confirm("Delete this tree from the map?")) return;
+  try {
+    const res = await apiFetch(`/api/trees/${treeId}`, { method: "DELETE" });
+    if (res.ok) { allTrees = allTrees.filter(t => t.id !== treeId); if (markers[treeId]) { map.removeLayer(markers[treeId]); delete markers[treeId]; } showToast("🗑 Tree deleted!"); loadAdminTrees(); }
+    else showToast("Failed to delete tree");
+  } catch { showToast("Error deleting tree"); }
+}
+window.deleteTree = deleteTree;
 
 async function loadAdminUsers() {
   try {
     const res = await apiFetch("/api/admin/users");
     const users = await res.json();
     document.getElementById("adminUsersList").innerHTML = users.length === 0
-      ? `<p style="color:var(--text-muted);font-size:0.85rem">No users yet</p>`
+      ? `<p style="color:var(--text-muted);font-size:0.85rem">No approved users yet</p>`
       : users.map(u => `
           <div class="my-tree-card" style="display:flex;justify-content:space-between;align-items:center;">
             <div>
               <div class="my-tree-type" style="font-size:0.9rem;">${u.name}</div>
               <div class="my-tree-notes">${u.email} · ${u.kgRescued.toFixed(1)}kg · ${u.treesReported} trees</div>
             </div>
-            ${u.email !== "akhilakella@outlook.com" ? `
-            <button onclick="deleteUser('${u.id}', '${u.name}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;flex-shrink:0;margin-left:10px;">🗑</button>
-            ` : `<span style="font-size:0.75rem;color:var(--gold);flex-shrink:0;">👑 Admin</span>`}
+            ${u.email !== "akhilakella@outlook.com" ? `<button onclick="deleteUser('${u.id}','${u.name}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;flex-shrink:0;margin-left:10px;">🗑</button>` : `<span style="font-size:0.75rem;color:var(--gold);flex-shrink:0;">👑 Admin</span>`}
           </div>`).join("");
   } catch { showToast("Could not load users"); }
 }
 
 async function deleteUser(userId, userName) {
-  if (!confirm(`Delete user "${userName}"? This cannot be undone!`)) return;
+  if (!confirm(`Delete user "${userName}"? Cannot be undone!`)) return;
   try {
     const res = await apiFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
     if (res.ok) { showToast(`🗑 ${userName} deleted`); loadAdminUsers(); }
@@ -746,6 +643,8 @@ async function deleteUser(userId, userName) {
   } catch { showToast("Error deleting user"); }
 }
 window.deleteUser = deleteUser;
+
+async function loadCurrentAnnouncement() {
   try {
     const res = await fetch("/api/announcement");
     const data = await res.json();
@@ -765,178 +664,68 @@ async function loadAnnouncement() {
 }
 
 function openAdminPanel() {
-  // Reset to analytics tab
   document.querySelectorAll("[data-admin-tab]").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".admin-tab-content").forEach(c => c.style.display = "none");
-  document.querySelector("[data-admin-tab='analytics']").classList.add("active");
-  document.getElementById("adminTab-analytics").style.display = "flex";
-  loadAdminAnalytics();
+  document.querySelector("[data-admin-tab='requests']").classList.add("active");
+  document.getElementById("adminTab-requests").style.display = "flex";
+  loadAdminRequests();
   openPanel("adminPanel");
 }
 
-async function deleteTree(treeId) {
-  if (!confirm("Delete this tree from the map?")) return;
-  try {
-    const res = await apiFetch(`/api/trees/${treeId}`, { method: "DELETE" });
-    if (!res.ok) { showToast("Failed to delete tree"); return; }
-    allTrees = allTrees.filter(t => t.id !== treeId);
-    if (markers[treeId]) { map.removeLayer(markers[treeId]); delete markers[treeId]; }
-    showToast("🗑 Tree deleted!");
-    loadAdminTrees();
-  } catch { showToast("Error deleting tree"); }
-}
-window.deleteTree = deleteTree;
-
-// ==================== FORGOT / RESET PASSWORD ====================
-document.getElementById("forgotPassBtn").addEventListener("click", () => {
-  document.getElementById("authScreen").classList.remove("active");
-  document.getElementById("forgotScreen").classList.add("active");
-});
-
-document.getElementById("backToLoginBtn").addEventListener("click", () => {
-  document.getElementById("forgotScreen").classList.remove("active");
-  document.getElementById("authScreen").classList.add("active");
-});
-
-document.getElementById("sendResetBtn").addEventListener("click", async () => {
-  const email = document.getElementById("forgotEmail").value.trim();
-  if (!email) { showForgotMsg("Please enter your email.", false); return; }
-  document.getElementById("sendResetBtn").disabled = true;
-  document.getElementById("sendResetBtn").textContent = "Sending...";
-  try {
-    await fetch("/api/forgot-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email })
-    });
-    showForgotMsg("If that email is registered, a reset link is on its way! Check your inbox.", true);
-  } catch {
-    showForgotMsg("Something went wrong. Please try again.", false);
-  } finally {
-    document.getElementById("sendResetBtn").disabled = false;
-    document.getElementById("sendResetBtn").textContent = "📧 Send Reset Link";
-  }
-});
-
-function showForgotMsg(text, success) {
-  const el = document.getElementById("forgotMsg");
-  el.textContent = text;
-  el.style.background = success ? "rgba(76,175,80,0.15)" : "rgba(192,57,43,0.15)";
-  el.style.border = success ? "1px solid rgba(76,175,80,0.4)" : "1px solid rgba(192,57,43,0.4)";
-  el.style.color = success ? "#81c784" : "#ff8a7a";
-  el.classList.remove("hidden");
-}
-
-function checkResetToken() {
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get("token");
-  if (token) {
-    document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-    document.getElementById("resetScreen").classList.add("active");
-    window._resetToken = token;
-  }
-}
-checkResetToken();
-
-document.getElementById("doResetBtn").addEventListener("click", async () => {
-  const newPass = document.getElementById("resetNewPass").value;
-  const confirmPass = document.getElementById("resetConfirmPass").value;
-  if (!newPass || !confirmPass) { showResetMsg("Please fill in both fields.", false); return; }
-  if (newPass.length < 6) { showResetMsg("Password must be at least 6 characters.", false); return; }
-  if (newPass !== confirmPass) { showResetMsg("Passwords don't match!", false); return; }
-  document.getElementById("doResetBtn").disabled = true;
-  document.getElementById("doResetBtn").textContent = "Saving...";
-  try {
-    const res = await fetch("/api/reset-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: window._resetToken, newPassword: newPass })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      showResetMsg("Password updated! You can now sign in.", true);
-      setTimeout(() => {
-        document.getElementById("resetScreen").classList.remove("active");
-        document.getElementById("authScreen").classList.add("active");
-        window.history.replaceState({}, "", "/");
-      }, 2000);
-    } else {
-      showResetMsg(data.error || "Reset failed. The link may have expired.", false);
-    }
-  } catch {
-    showResetMsg("Something went wrong. Please try again.", false);
-  } finally {
-    document.getElementById("doResetBtn").disabled = false;
-    document.getElementById("doResetBtn").textContent = "🔑 Set New Password";
-  }
-});
-
-function showResetMsg(text, success) {
-  const el = document.getElementById("resetMsg");
-  el.textContent = text;
-  el.style.background = success ? "rgba(76,175,80,0.15)" : "rgba(192,57,43,0.15)";
-  el.style.border = success ? "1px solid rgba(76,175,80,0.4)" : "1px solid rgba(192,57,43,0.4)";
-  el.style.color = success ? "#81c784" : "#ff8a7a";
-  el.classList.remove("hidden");
-}
-
+// ==================== AI FRUIT CHECKER ====================
 document.getElementById("treePhoto").addEventListener("change", (e) => {
   const btn = document.getElementById("aiCheckBtn");
   const result = document.getElementById("aiResult");
-  if (e.target.files[0]) {
-    btn.style.display = "block";
-    result.className = "ai-result hidden";
-    result.innerHTML = "";
-  } else {
-    btn.style.display = "none";
-  }
+  if (e.target.files[0]) { btn.style.display = "block"; result.className = "ai-result hidden"; result.innerHTML = ""; }
+  else { btn.style.display = "none"; }
 });
 
 document.getElementById("aiCheckBtn").addEventListener("click", async () => {
   const file = document.getElementById("treePhoto").files[0];
   if (!file) return;
-
   const resultDiv = document.getElementById("aiResult");
-  resultDiv.className = "ai-loading";
-  resultDiv.classList.remove("hidden");
+  resultDiv.className = "ai-loading"; resultDiv.classList.remove("hidden");
   resultDiv.innerHTML = `<div class="ai-spinner"></div> Analysing fruit quality...`;
-
   try {
-    // Convert image to base64
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(",")[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
+    const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(",")[1]); reader.onerror = reject; reader.readAsDataURL(file); });
     const mediaType = file.type || "image/jpeg";
-
-    const response = await fetch("/api/ai-check", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ imageBase64: base64, mediaType })
-    });
-
+    const response = await fetch("/api/ai-check", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ imageBase64: base64, mediaType }) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
-
     resultDiv.className = `ai-result grade-${result.grade}`;
-    resultDiv.innerHTML = `
-      <div class="ai-result-header">${result.emoji} ${result.headline}</div>
-      <p>${result.summary}</p>
-      <p style="margin-top:8px;opacity:0.8">💡 ${result.tips}</p>
-    `;
-
+    resultDiv.innerHTML = `<div class="ai-result-header">${result.emoji} ${result.headline}</div><p>${result.summary}</p><p style="margin-top:8px;opacity:0.8">💡 ${result.tips}</p>`;
   } catch (err) {
-    console.error("AI check failed:", err);
     resultDiv.className = "ai-result grade-ok";
-    resultDiv.innerHTML = `
-      <div class="ai-result-header">⚠️ Check unavailable</div>
-      <p>Could not analyse the photo right now. You can still submit the tree!</p>
-    `;
+    resultDiv.innerHTML = `<div class="ai-result-header">⚠️ Check unavailable</div><p>Could not analyse the photo right now. You can still submit the tree!</p>`;
   }
 });
+
+// ==================== HELPERS ====================
+async function apiFetch(url, opts = {}) {
+  return fetch(url, { ...opts, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(opts.headers || {}) }, body: opts.body });
+}
+
+function val(id) { return document.getElementById(id).value.trim(); }
+function showErr(el, msg) { el.textContent = msg; el.classList.remove("hidden"); }
+
+function setLoading(id, loading, label) {
+  const btn = document.getElementById(id);
+  btn.disabled = loading;
+  btn.textContent = loading ? "Please wait…" : label;
+}
+
+function capitalise(str) { if (!str) return ""; return str.charAt(0).toUpperCase() + str.slice(1).replace(/-/g, " "); }
+
+function timeSince(ts) {
+  const secs = Math.floor((Date.now() - ts) / 1000);
+  if (secs < 60) return "just now";
+  if (secs < 3600) return Math.floor(secs / 60) + "m ago";
+  if (secs < 86400) return Math.floor(secs / 3600) + "h ago";
+  return Math.floor(secs / 86400) + "d ago";
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3000);
+}
