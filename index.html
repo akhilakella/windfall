@@ -8,96 +8,70 @@
   <meta name="theme-color" content="#4a7c3f" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-
-  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
-
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 
-<!-- ========== AUTH SCREENS ========== -->
+<!-- AUTH SCREEN -->
 <div id="authScreen" class="screen active">
-  <div class="auth-bg">
-    <div class="auth-orbs">
-      <div class="orb orb1"></div>
-      <div class="orb orb2"></div>
-      <div class="orb orb3"></div>
-    </div>
-  </div>
+  <div class="auth-bg"><div class="auth-orbs"><div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div></div></div>
   <div class="auth-container">
     <div class="auth-logo">
       <img src="/icon.svg" alt="Windfall" class="auth-icon" />
       <h1 class="logo-text">Windfall</h1>
       <p class="logo-sub">Rugby's Apple Rescue Map</p>
     </div>
-
-    <!-- Tabs -->
     <div class="auth-tabs">
       <button class="auth-tab active" data-tab="login">Sign In</button>
       <button class="auth-tab" data-tab="register">Join</button>
     </div>
-
-    <!-- Login -->
     <div id="loginForm" class="auth-form active">
-      <div class="field-group">
-        <label>Email</label>
-        <input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email" />
-      </div>
-      <div class="field-group">
-        <label>Password</label>
-        <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" />
-      </div>
+      <div class="field-group"><label>Email</label><input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email" /></div>
+      <div class="field-group"><label>Password</label><input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" /></div>
       <div id="loginError" class="auth-error hidden"></div>
       <button id="loginBtn" class="btn-primary">Sign In</button>
       <button id="forgotPassBtn" style="background:none;border:none;color:var(--text-sub);font-size:0.82rem;cursor:pointer;margin-top:4px;text-decoration:underline;">Forgot password?</button>
     </div>
-
-    <!-- Register -->
     <div id="registerForm" class="auth-form">
-      <div class="field-group">
-        <label>Name</label>
-        <input type="text" id="regName" placeholder="Your name" autocomplete="name" />
-      </div>
-      <div class="field-group">
-        <label>Email</label>
-        <input type="email" id="regEmail" placeholder="your@email.com" autocomplete="email" />
-      </div>
-      <div class="field-group">
-        <label>Password</label>
-        <input type="password" id="regPass" placeholder="Min. 6 characters" autocomplete="new-password" />
-      </div>
+      <div class="field-group"><label>Name</label><input type="text" id="regName" placeholder="Your name" autocomplete="name" /></div>
+      <div class="field-group"><label>Email</label><input type="email" id="regEmail" placeholder="your@email.com" autocomplete="email" /></div>
+      <div class="field-group"><label>Password</label><input type="password" id="regPass" placeholder="Min. 6 characters" autocomplete="new-password" /></div>
       <div id="regError" class="auth-error hidden"></div>
-      <button id="registerBtn" class="btn-primary">Create Account</button>
+      <button id="registerBtn" class="btn-primary">Request Access</button>
     </div>
   </div>
 </div>
 
-<!-- ========== FORGOT PASSWORD SCREEN ========== -->
-<div id="forgotScreen" class="screen">
-  <div class="auth-bg">
-    <div class="auth-orbs">
-      <div class="orb orb1"></div>
-      <div class="orb orb2"></div>
-    </div>
-  </div>
-  <div class="auth-container">
+<!-- PENDING SCREEN -->
+<div id="pendingScreen" class="screen">
+  <div class="auth-bg"><div class="auth-orbs"><div class="orb orb1"></div><div class="orb orb2"></div></div></div>
+  <div class="auth-container" style="text-align:center;">
     <div class="auth-logo">
       <img src="/icon.svg" alt="Windfall" class="auth-icon" />
       <h1 class="logo-text">Windfall</h1>
-      <p class="logo-sub">Reset your password</p>
     </div>
+    <div style="background:rgba(212,168,67,0.1);border:1px solid rgba(212,168,67,0.3);border-radius:var(--radius);padding:24px;margin-bottom:20px;">
+      <div style="font-size:2.5rem;margin-bottom:12px;">⏳</div>
+      <h2 style="font-family:'Fraunces',serif;font-size:1.2rem;color:var(--gold);margin-bottom:8px;">Awaiting Approval</h2>
+      <p style="font-size:0.88rem;color:var(--text-sub);line-height:1.6;">Your account request has been received! The admin will review it shortly. You'll be able to sign in once approved.</p>
+    </div>
+    <p style="font-size:0.82rem;color:var(--text-muted);">Questions? Contact <a href="mailto:akhilakella@outlook.com" style="color:var(--green-light);">akhilakella@outlook.com</a></p>
+    <button id="backFromPendingBtn" style="background:none;border:none;color:var(--text-sub);font-size:0.85rem;cursor:pointer;text-decoration:underline;margin-top:16px;">← Back to Sign In</button>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD SCREEN -->
+<div id="forgotScreen" class="screen">
+  <div class="auth-bg"><div class="auth-orbs"><div class="orb orb1"></div><div class="orb orb2"></div></div></div>
+  <div class="auth-container">
+    <div class="auth-logo"><img src="/icon.svg" alt="Windfall" class="auth-icon" /><h1 class="logo-text">Windfall</h1><p class="logo-sub">Reset your password</p></div>
     <div style="display:flex;flex-direction:column;gap:16px;">
-      <div class="field-group">
-        <label>Your Email</label>
-        <input type="email" id="forgotEmail" placeholder="your@email.com" autocomplete="email" />
-      </div>
+      <div class="field-group"><label>Your Email</label><input type="email" id="forgotEmail" placeholder="your@email.com" /></div>
       <div id="forgotMsg" class="hidden" style="font-size:0.85rem;padding:10px 14px;border-radius:10px;"></div>
       <button id="sendResetBtn" class="btn-primary">📧 Send Reset Link</button>
       <button id="backToLoginBtn" style="background:none;border:none;color:var(--text-sub);font-size:0.85rem;cursor:pointer;text-decoration:underline;">← Back to Sign In</button>
@@ -105,123 +79,63 @@
   </div>
 </div>
 
-<!-- ========== RESET PASSWORD SCREEN ========== -->
+<!-- RESET PASSWORD SCREEN -->
 <div id="resetScreen" class="screen">
-  <div class="auth-bg">
-    <div class="auth-orbs">
-      <div class="orb orb1"></div>
-      <div class="orb orb2"></div>
-    </div>
-  </div>
+  <div class="auth-bg"><div class="auth-orbs"><div class="orb orb1"></div><div class="orb orb2"></div></div></div>
   <div class="auth-container">
-    <div class="auth-logo">
-      <img src="/icon.svg" alt="Windfall" class="auth-icon" />
-      <h1 class="logo-text">Windfall</h1>
-      <p class="logo-sub">Choose a new password</p>
-    </div>
+    <div class="auth-logo"><img src="/icon.svg" alt="Windfall" class="auth-icon" /><h1 class="logo-text">Windfall</h1><p class="logo-sub">Choose a new password</p></div>
     <div style="display:flex;flex-direction:column;gap:16px;">
-      <div class="field-group">
-        <label>New Password</label>
-        <input type="password" id="resetNewPass" placeholder="Min. 6 characters" autocomplete="new-password" />
-      </div>
-      <div class="field-group">
-        <label>Confirm Password</label>
-        <input type="password" id="resetConfirmPass" placeholder="Repeat new password" />
-      </div>
+      <div class="field-group"><label>New Password</label><input type="password" id="resetNewPass" placeholder="Min. 6 characters" /></div>
+      <div class="field-group"><label>Confirm Password</label><input type="password" id="resetConfirmPass" placeholder="Repeat new password" /></div>
       <div id="resetMsg" class="hidden" style="font-size:0.85rem;padding:10px 14px;border-radius:10px;"></div>
       <button id="doResetBtn" class="btn-primary">🔑 Set New Password</button>
     </div>
   </div>
 </div>
 
-<!-- ========== MAIN APP ========== -->
+<!-- MAIN APP -->
 <div id="appScreen" class="screen">
-
-  <!-- Map -->
   <div id="map"></div>
-
-  <!-- Top Bar -->
   <div class="top-bar">
-    <div class="top-bar-left">
-      <img src="/icon.svg" alt="" class="top-icon" />
-      <span class="top-title">Windfall</span>
-    </div>
+    <div class="top-bar-left"><img src="/icon.svg" alt="" class="top-icon" /><span class="top-title">Windfall</span></div>
     <div class="top-bar-right">
       <button class="icon-btn" id="leaderboardBtn" title="Leaderboard">🏆</button>
       <button class="icon-btn" id="profileBtn" title="Profile">👤</button>
     </div>
   </div>
-
-  <!-- Announcement Banner -->
   <div id="announcementBanner" class="announcement-banner hidden">
     <span id="announcementMsg"></span>
     <button id="dismissAnnouncement">✕</button>
   </div>
-
-  <!-- Legend -->
   <div class="legend">
     <div class="legend-item"><span class="dot dot-green"></span> Ready</div>
     <div class="legend-item"><span class="dot dot-red"></span> Rotten</div>
     <div class="legend-item"><span class="dot dot-blue"></span> Picked</div>
   </div>
-
-  <!-- FAB -->
   <button id="addTreeBtn" class="fab" title="Report a tree">＋</button>
-
-  <!-- Bottom Nav -->
   <nav class="bottom-nav">
-    <button class="nav-btn active" data-view="map">
-      <span class="nav-icon">🗺️</span>
-      <span class="nav-label">Map</span>
-    </button>
-    <button class="nav-btn" data-view="mytrees">
-      <span class="nav-icon">🌳</span>
-      <span class="nav-label">My Trees</span>
-    </button>
-    <button class="nav-btn" data-view="leaderboard">
-      <span class="nav-icon">🏆</span>
-      <span class="nav-label">Rankings</span>
-    </button>
-    <button class="nav-btn" data-view="profile">
-      <span class="nav-icon">👤</span>
-      <span class="nav-label">Profile</span>
-    </button>
-    <button class="nav-btn" data-view="contact">
-      <span class="nav-icon">📬</span>
-      <span class="nav-label">Contact</span>
-    </button>
+    <button class="nav-btn active" data-view="map"><span class="nav-icon">🗺️</span><span class="nav-label">Map</span></button>
+    <button class="nav-btn" data-view="mytrees"><span class="nav-icon">🌳</span><span class="nav-label">My Trees</span></button>
+    <button class="nav-btn" data-view="leaderboard"><span class="nav-icon">🏆</span><span class="nav-label">Rankings</span></button>
+    <button class="nav-btn" data-view="profile"><span class="nav-icon">👤</span><span class="nav-label">Profile</span></button>
+    <button class="nav-btn" data-view="contact"><span class="nav-icon">📬</span><span class="nav-label">Contact</span></button>
   </nav>
 </div>
 
-<!-- ========== PANELS ========== -->
+<!-- PANELS -->
 
-<!-- Report Tree Panel -->
+<!-- Report Tree -->
 <div id="reportPanel" class="panel">
-  <div class="panel-header">
-    <h2>Report a Tree</h2>
-    <button class="panel-close" id="closeReport">✕</button>
-  </div>
+  <div class="panel-header"><h2>Report a Tree</h2><button class="panel-close" id="closeReport">✕</button></div>
   <div class="panel-body">
     <p class="panel-hint">Tap the map to drop a pin, or use your current location.</p>
     <div class="loc-row">
-      <div class="field-group flex-1">
-        <label>Latitude</label>
-        <input type="number" id="pinLat" placeholder="52.370..." step="0.0001" />
-      </div>
-      <div class="field-group flex-1">
-        <label>Longitude</label>
-        <input type="number" id="pinLng" placeholder="-1.265..." step="0.0001" />
-      </div>
+      <div class="field-group flex-1"><label>Latitude</label><input type="number" id="pinLat" placeholder="52.370..." step="0.0001" /></div>
+      <div class="field-group flex-1"><label>Longitude</label><input type="number" id="pinLng" placeholder="-1.265..." step="0.0001" /></div>
     </div>
     <button class="btn-secondary" id="useLocationBtn">📍 Use My Location</button>
-
-    <div class="field-group">
-      <label>Street Address</label>
-      <input type="text" id="pinAddress" placeholder="Auto-filled when you use location..." readonly style="opacity:0.7" />
-    </div>
-
-    <div class="field-group">
-      <label>Fruit Type</label>
+    <div class="field-group"><label>Street Address</label><input type="text" id="pinAddress" placeholder="Auto-filled when you use location..." readonly style="opacity:0.7" /></div>
+    <div class="field-group"><label>Fruit Type</label>
       <select id="treeType">
         <option value="apple">🍎 Apple</option>
         <option value="pear">🍐 Pear</option>
@@ -230,51 +144,32 @@
         <option value="other">🌳 Other</option>
       </select>
     </div>
-    <div class="field-group">
-      <label>Land Type</label>
+    <div class="field-group"><label>Land Type</label>
       <select id="landType">
         <option value="public">Public (street / park)</option>
         <option value="private-permission">Private (with permission)</option>
         <option value="unknown">Unknown</option>
       </select>
     </div>
-    <div class="field-group">
-      <label>Estimated Fruit (kg)</label>
-      <input type="number" id="estKg" placeholder="e.g. 20" min="0" step="1" />
-    </div>
-    <div class="field-group">
-      <label>Notes</label>
-      <textarea id="treeNotes" placeholder="e.g. Big Bramley near the gate, loads of windfalls on the ground..." rows="3"></textarea>
-    </div>
-    <div class="field-group">
-      <label>Photo (optional)</label>
-      <input type="file" id="treePhoto" accept="image/*" capture="environment" />
-    </div>
-
+    <div class="field-group"><label>Estimated Fruit (kg)</label><input type="number" id="estKg" placeholder="e.g. 20" min="0" step="1" /></div>
+    <div class="field-group"><label>Notes</label><textarea id="treeNotes" placeholder="e.g. Big Bramley near the gate..." rows="3"></textarea></div>
+    <div class="field-group"><label>Photo (optional)</label><input type="file" id="treePhoto" accept="image/*" capture="environment" /></div>
     <button id="aiCheckBtn" class="btn-secondary" style="display:none">🤖 AI Fruit Quality Check</button>
     <div id="aiResult" class="ai-result hidden"></div>
-
     <div id="reportError" class="auth-error hidden"></div>
     <button id="submitTreeBtn" class="btn-primary">Drop Pin 📍</button>
   </div>
 </div>
 
-<!-- Tree Detail Panel -->
+<!-- Tree Detail -->
 <div id="treePanel" class="panel">
-  <div class="panel-header">
-    <h2 id="treePanelTitle">Apple Tree</h2>
-    <button class="panel-close" id="closeTree">✕</button>
-  </div>
-  <div class="panel-body" id="treePanelBody">
-  </div>
+  <div class="panel-header"><h2 id="treePanelTitle">Apple Tree</h2><button class="panel-close" id="closeTree">✕</button></div>
+  <div class="panel-body" id="treePanelBody"></div>
 </div>
 
-<!-- Profile Panel -->
+<!-- Profile -->
 <div id="profilePanel" class="panel">
-  <div class="panel-header">
-    <h2>My Profile</h2>
-    <button class="panel-close" id="closeProfile">✕</button>
-  </div>
+  <div class="panel-header"><h2>My Profile</h2><button class="panel-close" id="closeProfile">✕</button></div>
   <div class="panel-body">
     <div class="profile-card">
       <div class="profile-avatar" id="profileAvatar">🍎</div>
@@ -282,24 +177,11 @@
       <div class="profile-email" id="profileEmail">-</div>
     </div>
     <div class="stats-row">
-      <div class="stat-box">
-        <div class="stat-num" id="statKg">0</div>
-        <div class="stat-lbl">kg rescued</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num" id="statTrees">0</div>
-        <div class="stat-lbl">trees mapped</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num" id="statPickups">0</div>
-        <div class="stat-lbl">pickups</div>
-      </div>
+      <div class="stat-box"><div class="stat-num" id="statKg">0</div><div class="stat-lbl">kg rescued</div></div>
+      <div class="stat-box"><div class="stat-num" id="statTrees">0</div><div class="stat-lbl">trees mapped</div></div>
+      <div class="stat-box"><div class="stat-num" id="statPickups">0</div><div class="stat-lbl">pickups</div></div>
     </div>
-    <div class="badges-section">
-      <h3>Badges</h3>
-      <div id="badgesContainer" class="badges-grid"></div>
-    </div>
-
+    <div class="badges-section"><h3>Badges</h3><div id="badgesContainer" class="badges-grid"></div></div>
     <div class="field-group" style="margin-top:4px;">
       <label>Change Password</label>
       <input type="password" id="newPass" placeholder="New password (min. 6 chars)" />
@@ -307,39 +189,25 @@
       <button id="changePassBtn" class="btn-secondary" style="margin-top:8px;">🔑 Update Password</button>
       <div id="changePassMsg" class="hidden" style="font-size:0.82rem;margin-top:6px;padding:8px 12px;border-radius:8px;"></div>
     </div>
-
     <button id="logoutBtn" class="btn-danger">Sign Out</button>
   </div>
 </div>
 
-<!-- Leaderboard Panel -->
+<!-- Leaderboard -->
 <div id="leaderboardPanel" class="panel">
-  <div class="panel-header">
-    <h2>🏆 Rugby Rankings</h2>
-    <button class="panel-close" id="closeLeaderboard">✕</button>
-  </div>
-  <div class="panel-body">
-    <div id="leaderboardList" class="leaderboard-list"></div>
-  </div>
+  <div class="panel-header"><h2>🏆 Rugby Rankings</h2><button class="panel-close" id="closeLeaderboard">✕</button></div>
+  <div class="panel-body"><div id="leaderboardList" class="leaderboard-list"></div></div>
 </div>
 
-<!-- My Trees Panel -->
+<!-- My Trees -->
 <div id="myTreesPanel" class="panel">
-  <div class="panel-header">
-    <h2>🌳 My Reported Trees</h2>
-    <button class="panel-close" id="closeMyTrees">✕</button>
-  </div>
-  <div class="panel-body">
-    <div id="myTreesList" class="my-trees-list"></div>
-  </div>
+  <div class="panel-header"><h2>🌳 My Reported Trees</h2><button class="panel-close" id="closeMyTrees">✕</button></div>
+  <div class="panel-body"><div id="myTreesList" class="my-trees-list"></div></div>
 </div>
 
-<!-- Contact Panel -->
+<!-- Contact -->
 <div id="contactPanel" class="panel">
-  <div class="panel-header">
-    <h2>📬 Contact</h2>
-    <button class="panel-close" id="closeContact">✕</button>
-  </div>
+  <div class="panel-header"><h2>📬 Contact</h2><button class="panel-close" id="closeContact">✕</button></div>
   <div class="panel-body">
     <div class="profile-card">
       <div class="profile-avatar">👨‍💻</div>
@@ -347,36 +215,36 @@
       <div class="profile-email">Creator of Windfall</div>
     </div>
     <div style="background:rgba(74,124,63,0.1);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;display:flex;flex-direction:column;gap:8px;">
-      <p style="font-size:0.85rem;color:var(--text-sub)">Found a tree that needs removing? Spotted a bug? Want to get involved? Get in touch!</p>
+      <p style="font-size:0.85rem;color:var(--text-sub)">Got a wrong pin on the map? Found a bug? Or just want to say hi? Drop me a message!</p>
       <a href="mailto:akhilakella@outlook.com" style="color:var(--green-light);font-weight:600;font-size:0.95rem;text-decoration:none;">📧 akhilakella@outlook.com</a>
     </div>
-    <div style="font-size:0.8rem;color:var(--text-muted);text-align:center;line-height:1.6;">
-      Windfall is a free, community-powered app built by a 13-year-old in Rugby, Warwickshire.<br/>
-      Warwickshire Youth Council Member · BBC CWR Young Hero Award Winner
-    </div>
+    <div style="font-size:0.8rem;color:var(--text-muted);text-align:center;line-height:1.6;">Windfall is a free, community-powered app built by a 13-year-old in Rugby, Warwickshire.<br/>Warwickshire Youth Council Member · BBC CWR Young Hero Award Winner</div>
   </div>
 </div>
 
 <!-- Admin Panel -->
 <div id="adminPanel" class="panel">
-  <div class="panel-header">
-    <h2>🔧 Admin Panel</h2>
-    <button class="panel-close" id="closeAdmin">✕</button>
-  </div>
+  <div class="panel-header"><h2>🔧 Admin Panel</h2><button class="panel-close" id="closeAdmin">✕</button></div>
   <div class="panel-body" style="padding-top:0;gap:0;">
-    <!-- Admin Tabs -->
     <div class="auth-tabs" style="margin:16px 0 12px;flex-shrink:0;">
-      <button class="auth-tab active" data-admin-tab="analytics">📊 Stats</button>
+      <button class="auth-tab active" data-admin-tab="requests">📥 Requests</button>
+      <button class="auth-tab" data-admin-tab="analytics">📊 Stats</button>
       <button class="auth-tab" data-admin-tab="trees">🌳 Trees</button>
       <button class="auth-tab" data-admin-tab="announce">📢 Notice</button>
-      <button class="auth-tab" data-admin-tab="danger">⚠️ Reset</button>
+      <button class="auth-tab" data-admin-tab="danger">⚠️ Users</button>
+    </div>
+
+    <!-- Requests Tab -->
+    <div id="adminTab-requests" class="admin-tab-content">
+      <p style="font-size:0.85rem;color:var(--text-sub);margin-bottom:8px;">New users waiting for your approval to join Windfall.</p>
+      <div id="adminRequestsList" class="my-trees-list"></div>
     </div>
 
     <!-- Analytics Tab -->
-    <div id="adminTab-analytics" class="admin-tab-content">
-      <div class="stats-row" id="adminStatsRow">
+    <div id="adminTab-analytics" class="admin-tab-content" style="display:none;">
+      <div class="stats-row">
         <div class="stat-box"><div class="stat-num" id="aStat-kg">-</div><div class="stat-lbl">total kg</div></div>
-        <div class="stat-box"><div class="stat-num" id="aStat-trees">-</div><div class="stat-lbl">trees mapped</div></div>
+        <div class="stat-box"><div class="stat-num" id="aStat-trees">-</div><div class="stat-lbl">trees</div></div>
         <div class="stat-box"><div class="stat-num" id="aStat-users">-</div><div class="stat-lbl">users</div></div>
       </div>
       <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin:12px 0 8px;">Top Rescuers</h3>
@@ -389,29 +257,26 @@
     </div>
 
     <!-- Announcement Tab -->
-    <div id="adminTab-announce" class="admin-tab-content" style="display:none;gap:12px;display:none;flex-direction:column;">
+    <div id="adminTab-announce" class="admin-tab-content" style="display:none;">
       <p style="font-size:0.85rem;color:var(--text-sub);">Post a notice that appears on the map for all users. Leave blank and save to clear it.</p>
-      <textarea id="announcementText" rows="4" placeholder="e.g. Apple season is here! Head to Dunchurch Park to find trees ready to pick 🍎" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.9rem;resize:vertical;outline:none;"></textarea>
+      <textarea id="announcementText" rows="4" placeholder="e.g. Apple season is here! 🍎" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.9rem;resize:vertical;outline:none;width:100%;"></textarea>
       <button class="btn-primary" id="postAnnouncementBtn">📢 Post Notice</button>
       <button class="btn-secondary" id="clearAnnouncementBtn">✕ Clear Notice</button>
     </div>
 
-    <!-- Danger Tab -->
+    <!-- Users / Danger Tab -->
     <div id="adminTab-danger" class="admin-tab-content" style="display:none;">
       <div style="background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.3);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
-        <p style="font-size:0.85rem;color:#ff8a7a;line-height:1.5;">⚠️ This will reset ALL users' kg rescued, pickups, trees reported and badges back to zero. This cannot be undone!</p>
+        <p style="font-size:0.85rem;color:#ff8a7a;line-height:1.5;">⚠️ Reset ALL users' stats back to zero. Cannot be undone!</p>
       </div>
       <button class="btn-danger" id="resetStatsBtn">🔄 Reset All Stats</button>
-      <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin:16px 0 8px;">👥 All Users</h3>
+      <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin:16px 0 8px;">👥 Approved Users</h3>
       <div id="adminUsersList" class="my-trees-list"></div>
     </div>
   </div>
 </div>
 
-<!-- Overlay -->
 <div id="overlay" class="overlay hidden"></div>
-
-<!-- Toast -->
 <div id="toast" class="toast hidden"></div>
 
 <script src="/app.js"></script>
