@@ -92,14 +92,6 @@ On mobile, visit the app URL and tap **"Add to Home Screen"** — it works like 
 
 ---
 
-## Related Projects
-
-- **CrashGuard** — Android road safety app using STATS19 crash data
-- **Horse Apple Link** — Original Code.org demo that inspired Windfall
-- **ANPR System** — Raspberry Pi ANPR pipeline (rpi-anpr-uk)
-
----
-
 ## Organisations to Partner With
 
 - 🌿 Rugby Eco Hub
