@@ -80,6 +80,8 @@ app.post("/api/login", async (req, res) => {
     if (!match) return res.status(401).json({ error: "Invalid email or password" });
     if (user.status === "pending") return res.status(403).json({ error: "pending", message: "Your account is awaiting approval from the admin." });
     if (user.status === "rejected") return res.status(403).json({ error: "rejected", message: "Your account request was not approved. Contact akhilakella@outlook.com for help." });
+    user.badges = computeBadges(user);
+    await redis.set(`user:${userId}`, JSON.stringify(user));
     const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, kgRescued: user.kgRescued, treesReported: user.treesReported, pickups: user.pickups, badges: user.badges } });
   } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
@@ -89,6 +91,8 @@ app.get("/api/me", authMiddleware, async (req, res) => {
   try {
     const user = JSON.parse(await redis.get(`user:${req.user.id}`));
     if (!user) return res.status(404).json({ error: "User not found" });
+    user.badges = computeBadges(user);
+    await redis.set(`user:${req.user.id}`, JSON.stringify(user));
     res.json({ id: user.id, name: user.name, email: user.email, kgRescued: user.kgRescued, treesReported: user.treesReported, pickups: user.pickups, badges: user.badges });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
