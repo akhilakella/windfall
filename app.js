@@ -401,7 +401,16 @@ function updateProfilePanel() {
   document.getElementById("statKg").textContent = (currentUser.kgRescued || 0).toFixed(1);
   document.getElementById("statTrees").textContent = currentUser.treesReported || 0;
   document.getElementById("statPickups").textContent = currentUser.pickups || 0;
-  const badgeMap = { "tree-scout":["🌱","Tree Scout"], "orchard-mapper":["🗺️","Orchard Mapper"], "apple-saver":["🍎","Apple Saver"], "horse-hero":["🐴","Horse Hero"], "windfall-legend":["👑","Windfall Legend"], "gleaner":["🧺","Gleaner"] };
+  const badgeMap = {
+    "developer": ["⚙️", "Developer"],
+    "admin": ["👑", "Admin"],
+    "tree-scout":["🌱","Tree Scout"],
+    "orchard-mapper":["🗺️","Orchard Mapper"],
+    "apple-saver":["🍎","Apple Saver"],
+    "horse-hero":["🐴","Horse Hero"],
+    "windfall-legend":["👑","Windfall Legend"],
+    "gleaner":["🧺","Gleaner"]
+  };
   const bc = document.getElementById("badgesContainer");
   const badges = currentUser.badges || [];
   bc.innerHTML = badges.length === 0 ? `<p class="no-badges">Report your first tree to earn a badge! 🌱</p>` : badges.map(b => { const [icon, name] = badgeMap[b] || ["⭐", b]; return `<div class="badge">${icon} ${name}</div>`; }).join("");
@@ -416,10 +425,24 @@ async function openLeaderboard() {
   try {
     const res = await fetch("/api/leaderboard");
     const data = await res.json();
+    const { users, totalKg } = data;
     const medals = ["gold","silver","bronze"];
-    document.getElementById("leaderboardList").innerHTML = data.length === 0
-      ? `<p style="color:var(--text-muted);text-align:center">No rescuers yet — be first! 🍎</p>`
-      : data.map((u, i) => `<div class="leader-row"><div class="leader-rank ${medals[i]||""}">${i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div><div class="leader-info"><div class="leader-name">${u.name}</div><div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div></div><div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div></div>`).join("");
+    document.getElementById("leaderboardList").innerHTML = `
+      <div style="background:rgba(74,124,63,0.15);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center;margin-bottom:12px;">
+        <div style="font-family:'Fraunces',serif;font-size:2rem;font-weight:900;color:var(--green-light);">${(totalKg||0).toFixed(1)}kg</div>
+        <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">total fruit rescued by Rugby community 🍎</div>
+      </div>
+      ${users.length === 0
+        ? `<p style="color:var(--text-muted);text-align:center">No rescuers yet — be first! 🍎</p>`
+        : users.map((u, i) => `
+          <div class="leader-row">
+            <div class="leader-rank ${medals[i]||""}">${i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div>
+            <div class="leader-info">
+              <div class="leader-name">${u.name} ${u.email === "akhilakella@outlook.com" ? '<span style="font-size:0.7rem;background:rgba(212,168,67,0.2);color:var(--gold);border:1px solid rgba(212,168,67,0.4);border-radius:100px;padding:2px 8px;margin-left:4px;">👑 Dev</span>' : ""}</div>
+              <div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div>
+            </div>
+            <div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div>
+          </div>`).join("")}`;
     openPanel("leaderboardPanel");
   } catch { showToast("Could not load rankings"); }
 }
