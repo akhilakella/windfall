@@ -342,20 +342,30 @@ app.get("/api/leaderboard", async (req, res) => {
   try {
     const keys = await redis.keys("user:*");
     const users = [];
+    let totalKg = 0;
     for (const key of keys) {
       if (key.includes("email")) continue;
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       const u = JSON.parse(await redis.get(key));
-      if (u && u.name && u.status === "approved") users.push({ name: u.name, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, badges: u.badges || [] });
+      if (u && u.name && u.status === "approved") {
+        u.badges = computeBadges(u);
+        await redis.set(key, JSON.stringify(u));
+        totalKg += u.kgRescued || 0;
+        users.push({ name: u.name, email: u.email, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, badges: u.badges || [] });
+      }
     }
     users.sort((a, b) => b.kgRescued - a.kgRescued);
-    res.json(users.slice(0, 20));
+    res.json({ users: users.slice(0, 20), totalKg });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
 function computeBadges(user) {
   const badges = [];
+  if (user.email === ADMIN_EMAIL) {
+    badges.push("developer");
+    badges.push("admin");
+  }
   if (user.treesReported >= 1) badges.push("tree-scout");
   if (user.treesReported >= 10) badges.push("orchard-mapper");
   if (user.kgRescued >= 5) badges.push("apple-saver");
