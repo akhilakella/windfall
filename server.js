@@ -349,10 +349,9 @@ app.get("/api/leaderboard", async (req, res) => {
     let totalKg = 0;
     for (const key of keys) {
       if (key.includes("email")) continue;
-      const parts = key.split(":");
-      if (parts.length !== 2) continue;
+      if (!key.startsWith("user:")) continue;
       const u = JSON.parse(await redis.get(key));
-      if (u && u.name && u.status === "approved") {
+      if (u && u.name && u.status !== "pending" && u.status !== "rejected") {
         u.badges = computeBadges(u);
         await redis.set(key, JSON.stringify(u));
         totalKg += u.kgRescued || 0;
