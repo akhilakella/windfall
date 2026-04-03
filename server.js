@@ -372,7 +372,7 @@ function computeBadges(user) {
   if (user.treesReported >= 1) badges.push("tree-scout");
   if (user.treesReported >= 10) badges.push("orchard-mapper");
   if (user.kgRescued >= 5) badges.push("apple-saver");
-  if (user.kgRescued >= 50) badges.push("horse-hero");
+  if (user.kgRescued >= 50) badges.push("animal-hero");
   if (user.kgRescued >= 200) badges.push("windfall-legend");
   if (user.pickups >= 5) badges.push("gleaner");
   return badges;
@@ -385,7 +385,7 @@ app.post("/api/ai-check", authMiddleware, async (req, res) => {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`, "HTTP-Referer": "https://windfall-jvc3.onrender.com", "X-Title": "Windfall" },
-      body: JSON.stringify({ model: "openrouter/free", messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } }, { type: "text", text: `You are a fruit quality checker for a community apple rescue app in Rugby, UK. Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):\n{"grade":"good","emoji":"🍎","headline":"one short headline","summary":"2-3 sentences about quality and suitability for horses or humans","tips":"one practical tip"}\nUse grade: good=fresh/ripe/suitable, ok=slightly damaged but usable for animals/cider, bad=rotten/mouldy/unsafe. Use emoji 🍎 for good, ⚠️ for ok, 🚫 for bad.` }] }], max_tokens: 300 })
+      body: JSON.stringify({ model: "openrouter/free", messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } }, { type: "text", text: `You are a fruit quality checker for a community apple rescue app in Rugby, UK. Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):\n{"grade":"good","emoji":"🍎","headline":"one short headline","summary":"2-3 sentences about quality and suitability for animals or humans","tips":"one practical tip"}\nUse grade: good=fresh/ripe/suitable, ok=slightly damaged but usable for animals/cider, bad=rotten/mouldy/unsafe. Use emoji 🍎 for good, ⚠️ for ok, 🚫 for bad.` }] }], max_tokens: 300 })
     });
     const data = await response.json();
     const text = data.choices?.[0]?.message?.content || "";
