@@ -407,7 +407,7 @@ function updateProfilePanel() {
     "tree-scout":["🌱","Tree Scout"],
     "orchard-mapper":["🗺️","Orchard Mapper"],
     "apple-saver":["🍎","Apple Saver"],
-    "horse-hero":["🐴","Horse Hero"],
+    "animal-hero":["🐾","Animal Hero"],
     "windfall-legend":["👑","Windfall Legend"],
     "gleaner":["🧺","Gleaner"]
   };
@@ -430,7 +430,7 @@ async function openLeaderboard() {
     document.getElementById("leaderboardList").innerHTML = `
       <div style="background:rgba(74,124,63,0.15);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center;margin-bottom:12px;">
         <div style="font-family:'Fraunces',serif;font-size:2rem;font-weight:900;color:var(--green-light);">${(totalKg||0).toFixed(1)}kg</div>
-        <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">total fruit rescued by Rugby community 🍎</div>
+        <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">total fruit rescued by Warwickshire community 🍎</div>
       </div>
       ${users.length === 0
         ? `<p style="color:var(--text-muted);text-align:center">No rescuers yet — be first! 🍎</p>`
