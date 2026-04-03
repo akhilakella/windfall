@@ -1,7 +1,7 @@
 {
   "name": "windfall",
   "version": "1.0.0",
-  "description": "Windfall - Community apple tree mapping app for Rugby",
+  "description": "Windfall - Community apple tree mapping app for Warwickshire",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
