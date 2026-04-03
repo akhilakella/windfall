@@ -1,6 +1,6 @@
 # 🍎 Windfall
 
-> Rugby's community apple rescue map. Spot a tree. Pin it. Save the fruit.
+> Warwickshire's community apple rescue map. Spot a tree. Pin it. Save the fruit.
 
 Built by **Akhil Akella**, age 13 — House Leader, Warwickshire Youth Council member, BBC CWR Young Hero Award winner.
 
@@ -8,13 +8,13 @@ Built by **Akhil Akella**, age 13 — House Leader, Warwickshire Youth Council m
 
 ## What is Windfall?
 
-Every autumn, hundreds of apple trees across Rugby drop fruit onto pavements — rotting, wasted, crushed under car tyres. Windfall lets anyone in the community:
+Every autumn, hundreds of apple trees across Warwickshire drop fruit onto pavements — rotting, wasted, crushed under car tyres. Windfall lets anyone in the community:
 
 - 📍 **Pin trees** they spot on a live map
 - 🔴🟢🔵 **Track status** — Ready to Pick / Picked / Rotten
 - 🧺 **Log pickups** and track how many kg of fruit they've rescued
 - 🏆 **Compete** on a community leaderboard
-- 🎖️ **Earn badges** — Tree Scout, Horse Hero, Windfall Legend...
+- 🎖️ **Earn badges** — Tree Scout, Animal Hero, Windfall Legend...
 
 ---
 
@@ -86,7 +86,7 @@ On mobile, visit the app URL and tap **"Add to Home Screen"** — it works like 
 | 🌱 Tree Scout | Report your first tree |
 | 🗺️ Orchard Mapper | Report 10 trees |
 | 🍎 Apple Saver | Rescue 5kg of fruit |
-| 🐴 Horse Hero | Rescue 50kg of fruit |
+| 🐾 Animal Hero | Rescue 50kg of fruit |
 | 👑 Windfall Legend | Rescue 200kg of fruit |
 | 🧺 Gleaner | Log 5 pickups |
 
@@ -94,7 +94,7 @@ On mobile, visit the app URL and tap **"Add to Home Screen"** — it works like 
 
 ## Organisations to Partner With
 
-- 🌿 Rugby Eco Hub
+- 🌿 Warwickshire Eco Hub
 - 🍎 Friends of Dunchurch Society (FODS)
 - 🌳 Midshires Orchard Group
 - 🧺 Harvest Share (Forest of Hearts)
@@ -102,4 +102,4 @@ On mobile, visit the app URL and tap **"Add to Home Screen"** — it works like 
 
 ---
 
-*Made with 🍎 in Rugby, Warwickshire.*
+*Made with 🍎 in Warwickshire, Warwickshire.*
