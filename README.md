@@ -102,4 +102,4 @@ On mobile, visit the app URL and tap **"Add to Home Screen"** — it works like 
 
 ---
 
-*Made with 🍎 in Warwickshire, Warwickshire.*
+*Made with 🍎 in Rugby, Warwickshire.*
