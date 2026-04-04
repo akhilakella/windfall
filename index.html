@@ -99,13 +99,10 @@
   <div class="top-bar">
     <div class="top-bar-left"><img src="/icon.svg" alt="" class="top-icon" /><span class="top-title">Windfall</span></div>
     <div class="top-bar-right">
+      <button class="icon-btn" id="updatesBtn" title="Updates">📢</button>
       <button class="icon-btn" id="leaderboardBtn" title="Leaderboard">🏆</button>
       <button class="icon-btn" id="profileBtn" title="Profile">👤</button>
     </div>
-  </div>
-  <div id="announcementBanner" class="announcement-banner hidden">
-    <span id="announcementMsg"></span>
-    <button id="dismissAnnouncement">✕</button>
   </div>
   <div class="legend">
     <div class="legend-item"><span class="dot dot-green"></span> Ready</div>
@@ -273,10 +270,11 @@
 
     <!-- Announcement Tab -->
     <div id="adminTab-announce" class="admin-tab-content" style="display:none;">
-      <p style="font-size:0.85rem;color:var(--text-sub);">Post a notice that appears on the map for all users. Leave blank and save to clear it.</p>
-      <textarea id="announcementText" rows="4" placeholder="e.g. Apple season is here! 🍎" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.9rem;resize:vertical;outline:none;width:100%;"></textarea>
-      <button class="btn-primary" id="postAnnouncementBtn">📢 Post Notice</button>
-      <button class="btn-secondary" id="clearAnnouncementBtn">✕ Clear Notice</button>
+      <p style="font-size:0.85rem;color:var(--text-sub);">Post updates, bug fixes, and changelogs for your users.</p>
+      <div class="field-group"><label>Title</label><input type="text" id="announcementTitle" placeholder="e.g. v1.2 — Map filter added" /></div>
+      <div class="field-group"><label>Body</label><textarea id="announcementBody" rows="3" placeholder="Describe the update or fix..."></textarea></div>
+      <button class="btn-primary" id="postAnnouncementBtn">📢 Post Update</button>
+      <div id="adminAnnouncementsList" class="my-trees-list" style="margin-top:4px;"></div>
     </div>
 
     <!-- Users / Danger Tab -->
@@ -289,6 +287,12 @@
       <div id="adminUsersList" class="my-trees-list"></div>
     </div>
   </div>
+</div>
+
+<!-- Updates Panel -->
+<div id="updatesPanel" class="panel">
+  <div class="panel-header"><h2>📢 Updates</h2><button class="panel-close" id="closeUpdates">✕</button></div>
+  <div class="panel-body"><div id="updatesList" class="my-trees-list"></div></div>
 </div>
 
 <div id="overlay" class="overlay hidden"></div>
