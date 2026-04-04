@@ -202,6 +202,21 @@ app.patch("/api/trees/:id/status", authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
+app.post("/api/trees/:id/comments", authMiddleware, async (req, res) => {
+  try {
+    const raw = await redis.get(`tree:${req.params.id}`);
+    if (!raw) return res.status(404).json({ error: "Tree not found" });
+    const tree = JSON.parse(raw);
+    const { text } = req.body;
+    if (!text || !text.trim()) return res.status(400).json({ error: "Comment text required" });
+    const comment = { id: uuidv4(), userId: req.user.id, userName: req.user.name, text: text.trim(), at: Date.now() };
+    if (!tree.comments) tree.comments = [];
+    tree.comments.push(comment);
+    await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
+    res.json(comment);
+  } catch (err) { res.status(500).json({ error: "Server error" }); }
+});
+
 app.delete("/api/trees/:id", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const raw = await redis.get(`tree:${req.params.id}`);
@@ -313,12 +328,13 @@ app.patch("/api/admin/trees/:id", authMiddleware, adminMiddleware, async (req, r
     const raw = await redis.get(`tree:${req.params.id}`);
     if (!raw) return res.status(404).json({ error: "Tree not found" });
     const tree = JSON.parse(raw);
-    const { type, notes, landType, estimatedKg, address } = req.body;
+    const { type, notes, landType, estimatedKg, address, verified } = req.body;
     if (type) tree.type = type;
     if (notes !== undefined) tree.notes = notes;
     if (landType) tree.landType = landType;
     if (estimatedKg !== undefined) tree.estimatedKg = parseFloat(estimatedKg) || 0;
     if (address !== undefined) tree.address = address;
+    if (verified !== undefined) tree.verified = !!verified;
     await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
     res.json(tree);
   } catch (err) { res.status(500).json({ error: "Server error" }); }
