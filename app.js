@@ -24,7 +24,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupAdminTabs();
   setupFilters();
   checkResetToken();
-  loadAnnouncement();
 
   if (token) {
     try {
@@ -482,6 +481,7 @@ function updateProfilePanel() {
 
 // ==================== LEADERBOARD ====================
 function setupLeaderboardBtn() {
+  document.getElementById("updatesBtn").addEventListener("click", openUpdatesPanel);
   document.getElementById("leaderboardBtn").addEventListener("click", openLeaderboard);
 }
 
@@ -572,7 +572,7 @@ function setupNavButtons() {
 
 // ==================== PANELS ====================
 function setupPanelCloses() {
-  [["closeReport","reportPanel"],["closeTree","treePanel"],["closeProfile","profilePanel"],["closeLeaderboard","leaderboardPanel"],["closeMyTrees","myTreesPanel"],["closeContact","contactPanel"],["closeAdmin","adminPanel"]].forEach(([btnId, panelId]) => {
+  [["closeReport","reportPanel"],["closeTree","treePanel"],["closeProfile","profilePanel"],["closeLeaderboard","leaderboardPanel"],["closeMyTrees","myTreesPanel"],["closeContact","contactPanel"],["closeAdmin","adminPanel"],["closeUpdates","updatesPanel"]].forEach(([btnId, panelId]) => {
     document.getElementById(btnId).addEventListener("click", () => closePanel(panelId));
   });
   document.getElementById("overlay").addEventListener("click", closeAllPanels);
@@ -595,7 +595,7 @@ function setupAdminTabs() {
       if (name === "requests") loadAdminRequests();
       if (name === "analytics") loadAdminAnalytics();
       if (name === "trees") loadAdminTrees();
-      if (name === "announce") loadCurrentAnnouncement();
+      if (name === "announce") loadAdminAnnouncements();
       if (name === "danger") loadAdminUsers();
     });
   });
@@ -610,25 +610,18 @@ function setupAdminTabs() {
   });
 
   document.getElementById("postAnnouncementBtn").addEventListener("click", async () => {
-    const message = document.getElementById("announcementText").value.trim();
+    const title = document.getElementById("announcementTitle").value.trim();
+    const body = document.getElementById("announcementBody").value.trim();
+    if (!title || !body) { showToast("Title and body are required"); return; }
     try {
-      const res = await apiFetch("/api/admin/announcement", { method: "POST", body: JSON.stringify({ message }) });
-      if (res.ok) { showToast("📢 Notice posted!"); loadAnnouncement(); }
-      else showToast("Failed to post notice");
-    } catch { showToast("Error posting notice"); }
-  });
-
-  document.getElementById("clearAnnouncementBtn").addEventListener("click", async () => {
-    try {
-      await apiFetch("/api/admin/announcement", { method: "POST", body: JSON.stringify({ message: "" }) });
-      document.getElementById("announcementBanner").classList.add("hidden");
-      document.getElementById("announcementText").value = "";
-      showToast("Notice cleared!");
-    } catch { showToast("Error clearing notice"); }
-  });
-
-  document.getElementById("dismissAnnouncement").addEventListener("click", () => {
-    document.getElementById("announcementBanner").classList.add("hidden");
+      const res = await apiFetch("/api/admin/announcements", { method: "POST", body: JSON.stringify({ title, body }) });
+      if (res.ok) {
+        document.getElementById("announcementTitle").value = "";
+        document.getElementById("announcementBody").value = "";
+        showToast("📢 Update posted!");
+        loadAdminAnnouncements();
+      } else showToast("Failed to post update");
+    } catch { showToast("Error posting update"); }
   });
 }
 
@@ -780,23 +773,51 @@ async function deleteUser(userId, userName) {
 }
 window.deleteUser = deleteUser;
 
-async function loadCurrentAnnouncement() {
+async function loadAdminAnnouncements() {
   try {
-    const res = await fetch("/api/announcement");
-    const data = await res.json();
-    if (data && data.message) document.getElementById("announcementText").value = data.message;
+    const res = await fetch("/api/announcements");
+    const posts = await res.json();
+    document.getElementById("adminAnnouncementsList").innerHTML = posts.length === 0
+      ? `<p style="color:var(--text-muted);font-size:0.85rem;text-align:center;">No updates posted yet.</p>`
+      : posts.map(p => `
+          <div class="my-tree-card" style="gap:6px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div>
+                <div class="my-tree-type" style="font-size:0.9rem;">${p.title}</div>
+                <div class="my-tree-notes">${timeSince(p.postedAt)}</div>
+              </div>
+              <button onclick="deleteAnnouncement('${p.id}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:4px 9px;font-size:0.78rem;cursor:pointer;flex-shrink:0;margin-left:8px;">🗑</button>
+            </div>
+            <div class="my-tree-notes" style="margin-top:4px;">${p.body}</div>
+          </div>`).join("");
   } catch {}
 }
 
-async function loadAnnouncement() {
+async function deleteAnnouncement(id) {
   try {
-    const res = await fetch("/api/announcement");
-    const data = await res.json();
-    if (data && data.message) {
-      document.getElementById("announcementMsg").textContent = "📢 " + data.message;
-      document.getElementById("announcementBanner").classList.remove("hidden");
-    }
-  } catch {}
+    const res = await apiFetch(`/api/admin/announcements/${id}`, { method: "DELETE" });
+    if (res.ok) { showToast("🗑 Update deleted"); loadAdminAnnouncements(); }
+    else showToast("Failed to delete");
+  } catch { showToast("Error deleting update"); }
+}
+window.deleteAnnouncement = deleteAnnouncement;
+
+async function openUpdatesPanel() {
+  try {
+    const res = await fetch("/api/announcements");
+    const posts = await res.json();
+    document.getElementById("updatesList").innerHTML = posts.length === 0
+      ? `<p style="color:var(--text-muted);text-align:center;">No updates yet — check back soon! 🌿</p>`
+      : posts.map(p => `
+          <div class="my-tree-card" style="cursor:default;">
+            <div class="my-tree-header">
+              <span class="my-tree-type">${p.title}</span>
+              <span class="my-tree-date">${timeSince(p.postedAt)}</span>
+            </div>
+            <div class="my-tree-notes" style="margin-top:4px;line-height:1.5;">${p.body}</div>
+          </div>`).join("");
+  } catch { showToast("Could not load updates"); return; }
+  openPanel("updatesPanel");
 }
 
 function openAdminPanel() {
