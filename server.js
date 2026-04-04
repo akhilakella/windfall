@@ -276,7 +276,7 @@ app.get("/api/admin/users", authMiddleware, adminMiddleware, async (req, res) =>
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       const u = JSON.parse(await redis.get(key));
-      if (u && u.name && u.status === "approved") users.push({ id: u.id, name: u.name, email: u.email, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, joinedAt: u.joinedAt });
+      if (u && u.name && u.status !== "pending" && u.status !== "rejected") users.push({ id: u.id, name: u.name, email: u.email, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, joinedAt: u.joinedAt });
     }
     users.sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0));
     res.json(users);
@@ -340,20 +340,32 @@ app.patch("/api/admin/trees/:id", authMiddleware, adminMiddleware, async (req, r
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
-app.post("/api/admin/announcement", authMiddleware, adminMiddleware, async (req, res) => {
+app.get("/api/announcements", async (req, res) => {
   try {
-    const { message } = req.body;
-    if (!message) { await redis.del("announcement"); return res.json({ success: true, cleared: true }); }
-    const announcement = { message, postedAt: Date.now() };
-    await redis.set("announcement", JSON.stringify(announcement));
-    res.json(announcement);
+    const raw = await redis.get("announcements");
+    res.json(raw ? JSON.parse(raw) : []);
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
-app.get("/api/announcement", async (req, res) => {
+app.post("/api/admin/announcements", authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const raw = await redis.get("announcement");
-    res.json(raw ? JSON.parse(raw) : null);
+    const { title, body } = req.body;
+    if (!title || !body) return res.status(400).json({ error: "Title and body required" });
+    const raw = await redis.get("announcements");
+    const list = raw ? JSON.parse(raw) : [];
+    const post = { id: uuidv4(), title: title.trim(), body: body.trim(), postedAt: Date.now() };
+    list.unshift(post);
+    await redis.set("announcements", JSON.stringify(list));
+    res.json(post);
+  } catch (err) { res.status(500).json({ error: "Server error" }); }
+});
+
+app.delete("/api/admin/announcements/:id", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const raw = await redis.get("announcements");
+    const list = raw ? JSON.parse(raw) : [];
+    await redis.set("announcements", JSON.stringify(list.filter(a => a.id !== req.params.id)));
+    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
