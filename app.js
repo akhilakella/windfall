@@ -8,6 +8,8 @@ let map = null;
 let markers = {};
 let tempMarker = null;
 let allTrees = [];
+let activeTypeFilter = "all";
+let activeStatusFilter = "all";
 
 // ==================== INIT ====================
 document.addEventListener("DOMContentLoaded", async () => {
@@ -20,6 +22,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupLeaderboardBtn();
   setupProfileBtn();
   setupAdminTabs();
+  setupFilters();
   checkResetToken();
   loadAnnouncement();
 
@@ -240,11 +243,15 @@ function getFruitEmoji(t) { return ({ apple:"🍎", pear:"🍐", plum:"🟣", ch
 function addTreeMarker(tree) {
   if (markers[tree.id]) map.removeLayer(markers[tree.id]);
   const color = getStatusColor(tree.status), emoji = getFruitEmoji(tree.type);
-  const icon = L.divIcon({ className: "temp-pin", html: `<div style="width:36px;height:36px;border-radius:50%;background:${color}22;border:2.5px solid ${color};box-shadow:0 0 10px ${color}88;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;">${emoji}</div>`, iconAnchor: [18,18], popupAnchor: [0,-20] });
-  const marker = L.marker([tree.lat, tree.lng], { icon }).addTo(map);
+  const verifiedBadge = tree.verified ? `<div style="position:absolute;top:-3px;right:-3px;background:#4CAF50;border:1.5px solid #111d10;border-radius:50%;width:14px;height:14px;font-size:9px;display:flex;align-items:center;justify-content:center;color:white;">✓</div>` : "";
+  const icon = L.divIcon({ className: "temp-pin", html: `<div style="position:relative;display:inline-block;"><div style="width:36px;height:36px;border-radius:50%;background:${color}22;border:2.5px solid ${color};box-shadow:0 0 10px ${color}88;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;">${emoji}</div>${verifiedBadge}</div>`, iconAnchor: [18,18], popupAnchor: [0,-20] });
+  const marker = L.marker([tree.lat, tree.lng], { icon });
   const kgText = tree.estimatedKg > 0 ? `~${tree.estimatedKg}kg` : "";
   marker.bindPopup(`<div class="popup-title">${emoji} ${capitalise(tree.type)} Tree</div><div class="popup-sub">${kgText ? kgText + " · " : ""}${capitalise(tree.landType)} · by ${tree.reportedByName}</div><button class="popup-btn" onclick="openTreePanel('${tree.id}')">View Details</button>`);
   markers[tree.id] = marker;
+  const typeOk = activeTypeFilter === "all" || tree.type === activeTypeFilter;
+  const statusOk = activeStatusFilter === "all" || tree.status === activeStatusFilter;
+  if (typeOk && statusOk) marker.addTo(map);
 }
 
 async function loadTrees() {
@@ -324,6 +331,7 @@ function openTreePanel(treeId) {
   const emoji = getFruitEmoji(tree.type);
   document.getElementById("treePanelTitle").textContent = `${emoji} ${capitalise(tree.type)} Tree`;
   const pickupList = (tree.pickups || []).map(p => `<div class="pickup-row"><span>${p.byName}</span><span>${p.kg}kg · ${timeSince(p.at)}</span></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet — be the first!</p>";
+  const commentList = (tree.comments || []).map(c => `<div class="comment-row"><span class="comment-name">${c.userName}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${c.text}</p></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No comments yet — leave a note!</p>";
   document.getElementById("treePanelBody").innerHTML = `
     ${tree.photo ? `<img src="${tree.photo}" class="tree-detail-photo" alt="Tree photo" />` : ""}
     <div class="tree-meta">
@@ -331,9 +339,18 @@ function openTreePanel(treeId) {
       <span class="tree-chip">📍 ${capitalise(tree.landType)}</span>
       ${tree.estimatedKg > 0 ? `<span class="tree-chip">~${tree.estimatedKg}kg</span>` : ""}
       <span class="tree-status-chip status-${tree.status}">${capitalise(tree.status)}</span>
+      ${tree.verified ? '<span class="tree-chip" style="background:rgba(76,175,80,0.15);color:#81c784;border-color:rgba(76,175,80,0.35);">✅ Verified</span>' : ""}
     </div>
     ${tree.notes ? `<p class="tree-notes">"${tree.notes}"</p>` : ""}
     <div style="font-size:0.8rem;color:var(--text-muted)">Reported by ${tree.reportedByName} · ${timeSince(tree.reportedAt)}${tree.address ? `<br/>📍 ${tree.address}` : ""}</div>
+    <div>
+      <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin-bottom:8px;">Update Status</h3>
+      <div class="status-btn-row">
+        <button class="status-btn${tree.status==='active'?' active':''}" onclick="updateTreeStatus('${tree.id}','active')">🌿 Ready</button>
+        <button class="status-btn${tree.status==='picked'?' active':''}" onclick="updateTreeStatus('${tree.id}','picked')">✅ Picked</button>
+        <button class="status-btn${tree.status==='rotten'?' active':''}" onclick="updateTreeStatus('${tree.id}','rotten')">🍂 Rotten</button>
+      </div>
+    </div>
     <div class="tree-pickup-form">
       <h3 style="font-family:'Fraunces',serif;font-size:1rem;color:var(--text-sub)">Log a Pickup</h3>
       <input type="number" id="pickupKg" placeholder="How many kg did you rescue?" min="0" step="0.5" />
@@ -342,6 +359,14 @@ function openTreePanel(treeId) {
     <div>
       <h3 style="font-family:'Fraunces',serif;font-size:1rem;color:var(--text-sub);margin-bottom:8px">Pickup History</h3>
       <div class="pickup-history">${pickupList}</div>
+    </div>
+    <div>
+      <h3 style="font-family:'Fraunces',serif;font-size:1rem;color:var(--text-sub);margin-bottom:8px">💬 Comments</h3>
+      <div class="comment-list" id="commentList-${tree.id}">${commentList}</div>
+      <div class="comment-form">
+        <textarea id="commentText-${tree.id}" placeholder="Leave a note about this tree..." rows="2"></textarea>
+        <button class="btn-secondary btn-sm" onclick="addComment('${tree.id}')">Post Comment</button>
+      </div>
     </div>`;
   openPanel("treePanel");
 }
@@ -364,6 +389,45 @@ async function logPickup(treeId) {
   } catch { showToast("Failed to log pickup"); }
 }
 window.logPickup = logPickup;
+
+async function updateTreeStatus(treeId, status) {
+  try {
+    const res = await apiFetch(`/api/trees/${treeId}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+    if (!res.ok) { showToast("Failed to update status"); return; }
+    const updated = await res.json();
+    const idx = allTrees.findIndex(t => t.id === treeId);
+    if (idx !== -1) allTrees[idx] = updated;
+    addTreeMarker(updated);
+    applyFilters();
+    openTreePanel(treeId);
+    showToast("Status updated! ✅");
+  } catch { showToast("Failed to update status"); }
+}
+window.updateTreeStatus = updateTreeStatus;
+
+async function addComment(treeId) {
+  const textarea = document.getElementById(`commentText-${treeId}`);
+  const text = textarea ? textarea.value.trim() : "";
+  if (!text) { showToast("Type a comment first!"); return; }
+  try {
+    const res = await apiFetch(`/api/trees/${treeId}/comments`, { method: "POST", body: JSON.stringify({ text }) });
+    const comment = await res.json();
+    if (!res.ok) { showToast(comment.error || "Failed to post comment"); return; }
+    const treeIdx = allTrees.findIndex(t => t.id === treeId);
+    if (treeIdx !== -1) {
+      if (!allTrees[treeIdx].comments) allTrees[treeIdx].comments = [];
+      allTrees[treeIdx].comments.push(comment);
+    }
+    textarea.value = "";
+    const listEl = document.getElementById(`commentList-${treeId}`);
+    if (listEl) {
+      const comments = allTrees[treeIdx]?.comments || [];
+      listEl.innerHTML = comments.map(c => `<div class="comment-row"><span class="comment-name">${c.userName}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${c.text}</p></div>`).join("");
+    }
+    showToast("Comment posted! 💬");
+  } catch { showToast("Failed to post comment"); }
+}
+window.addComment = addComment;
 
 // ==================== PROFILE ====================
 function setupProfileBtn() {
@@ -456,6 +520,38 @@ function openMyTrees() {
   openPanel("myTreesPanel");
 }
 window.openMyTrees = openMyTrees;
+
+// ==================== FILTERS ====================
+function setupFilters() {
+  document.querySelectorAll(".filter-pill[data-filter-type]").forEach(pill => {
+    pill.addEventListener("click", () => {
+      document.querySelectorAll(".filter-pill[data-filter-type]").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      activeTypeFilter = pill.dataset.filterType;
+      applyFilters();
+    });
+  });
+  document.querySelectorAll(".filter-pill[data-filter-status]").forEach(pill => {
+    pill.addEventListener("click", () => {
+      document.querySelectorAll(".filter-pill[data-filter-status]").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      activeStatusFilter = pill.dataset.filterStatus;
+      applyFilters();
+    });
+  });
+}
+
+function applyFilters() {
+  if (!map) return;
+  allTrees.forEach(tree => {
+    const marker = markers[tree.id];
+    if (!marker) return;
+    const typeOk = activeTypeFilter === "all" || tree.type === activeTypeFilter;
+    const statusOk = activeStatusFilter === "all" || tree.status === activeStatusFilter;
+    if (typeOk && statusOk) { if (!map.hasLayer(marker)) marker.addTo(map); }
+    else { if (map.hasLayer(marker)) map.removeLayer(marker); }
+  });
+}
 
 // ==================== NAV ====================
 function setupNavButtons() {
@@ -599,6 +695,7 @@ function loadAdminTrees() {
               <div class="my-tree-notes">by ${t.reportedByName} · ${t.address || "No address"}</div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button onclick="toggleVerifyTree('${t.id}', ${!t.verified})" title="${t.verified ? 'Remove verification' : 'Mark as verified'}" style="background:${t.verified ? 'rgba(212,168,67,0.2)' : 'rgba(76,175,80,0.2)'};border:1px solid ${t.verified ? 'rgba(212,168,67,0.4)' : 'rgba(76,175,80,0.4)'};color:${t.verified ? 'var(--gold)' : '#81c784'};border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">${t.verified ? '🔓' : '✅'}</button>
               <button onclick="openEditTree('${t.id}')" style="background:rgba(74,124,63,0.2);border:1px solid var(--border);color:var(--green-light);border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✏️</button>
               <button onclick="deleteTree('${t.id}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">🗑</button>
             </div>
@@ -639,6 +736,22 @@ async function deleteTree(treeId) {
   } catch { showToast("Error deleting tree"); }
 }
 window.deleteTree = deleteTree;
+
+async function toggleVerifyTree(treeId, verified) {
+  try {
+    const res = await apiFetch(`/api/admin/trees/${treeId}`, { method: "PATCH", body: JSON.stringify({ verified }) });
+    if (res.ok) {
+      const updated = await res.json();
+      const idx = allTrees.findIndex(t => t.id === treeId);
+      if (idx !== -1) allTrees[idx] = updated;
+      addTreeMarker(updated);
+      applyFilters();
+      loadAdminTrees();
+      showToast(verified ? "✅ Tree verified!" : "🔓 Verification removed");
+    } else showToast("Failed to update tree");
+  } catch { showToast("Error updating tree"); }
+}
+window.toggleVerifyTree = toggleVerifyTree;
 
 async function loadAdminUsers() {
   try {
