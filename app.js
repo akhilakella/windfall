@@ -14,7 +14,6 @@ let activeStatusFilter = "all";
 // ==================== INIT ====================
 document.addEventListener("DOMContentLoaded", async () => {
   registerSW();
-  initTheme();
   setupAuthTabs();
   setupAuthForms();
   setupNavButtons();
@@ -37,21 +36,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function registerSW() {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
-}
-
-// ==================== THEME ====================
-function initTheme() {
-  if (localStorage.getItem("wf_theme") === "light") {
-    document.body.classList.add("light-mode");
-    document.getElementById("themeToggleBtn").textContent = "🌙 Switch to Dark Mode";
-  }
-  document.getElementById("themeToggleBtn").addEventListener("click", toggleTheme);
-}
-
-function toggleTheme() {
-  const isLight = document.body.classList.toggle("light-mode");
-  localStorage.setItem("wf_theme", isLight ? "light" : "dark");
-  document.getElementById("themeToggleBtn").textContent = isLight ? "🌙 Switch to Dark Mode" : "☀️ Switch to Light Mode";
 }
 
 // ==================== AUTH ====================
