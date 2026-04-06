@@ -383,7 +383,7 @@ app.get("/api/leaderboard", async (req, res) => {
         u.badges = computeBadges(u);
         await redis.set(key, JSON.stringify(u));
         totalKg += u.kgRescued || 0;
-        users.push({ name: u.name, email: u.email, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, badges: u.badges || [] });
+        users.push({ id: u.id, name: u.name, email: u.email, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, badges: u.badges || [] });
       }
     }
     users.sort((a, b) => b.kgRescued - a.kgRescued);
@@ -420,6 +420,15 @@ app.post("/api/ai-check", authMiddleware, async (req, res) => {
     try { res.json(JSON.parse(text.replace(/```json|```/g, "").trim())); }
     catch { res.status(500).json({ error: "Could not parse AI response" }); }
   } catch (err) { console.error("AI check error:", err); res.status(500).json({ error: "AI check failed" }); }
+});
+
+// ---- USER PROFILE (public safe) ----
+app.get("/api/users/:id/profile", authMiddleware, async (req, res) => {
+  try {
+    const user = JSON.parse(await redis.get(`user:${req.params.id}`));
+    if (!user || user.status === "pending" || user.status === "rejected") return res.status(404).json({ error: "User not found" });
+    res.json({ id: user.id, name: user.name, kgRescued: user.kgRescued || 0, treesReported: user.treesReported || 0, pickups: user.pickups || 0, badges: computeBadges(user), joinedAt: user.joinedAt });
+  } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
 app.get("*", (req, res) => res.sendFile(path.join(__dirname, "index.html")));
