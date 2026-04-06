@@ -14,6 +14,7 @@ let activeStatusFilter = "all";
 // ==================== INIT ====================
 document.addEventListener("DOMContentLoaded", async () => {
   registerSW();
+  initTheme();
   setupAuthTabs();
   setupAuthForms();
   setupNavButtons();
@@ -36,6 +37,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function registerSW() {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
+
+// ==================== THEME ====================
+function initTheme() {
+  if (localStorage.getItem("wf_theme") === "light") {
+    document.body.classList.add("light-mode");
+    document.getElementById("themeToggleBtn").textContent = "🌙 Switch to Dark Mode";
+  }
+  document.getElementById("themeToggleBtn").addEventListener("click", toggleTheme);
+}
+
+function toggleTheme() {
+  const isLight = document.body.classList.toggle("light-mode");
+  localStorage.setItem("wf_theme", isLight ? "light" : "dark");
+  document.getElementById("themeToggleBtn").textContent = isLight ? "🌙 Switch to Dark Mode" : "☀️ Switch to Light Mode";
 }
 
 // ==================== AUTH ====================
@@ -330,7 +346,7 @@ function openTreePanel(treeId) {
   const emoji = getFruitEmoji(tree.type);
   document.getElementById("treePanelTitle").textContent = `${emoji} ${capitalise(tree.type)} Tree`;
   const pickupList = (tree.pickups || []).map(p => `<div class="pickup-row"><span>${p.byName}</span><span>${p.kg}kg · ${timeSince(p.at)}</span></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet — be the first!</p>";
-  const commentList = (tree.comments || []).map(c => `<div class="comment-row"><span class="comment-name">${c.userName}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${c.text}</p></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No comments yet — leave a note!</p>";
+  const commentList = (tree.comments || []).map(c => `<div class="comment-row"><span class="comment-name" style="cursor:pointer" onclick="openUserProfile('${c.userId}')">${c.userName}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${c.text}</p></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No comments yet — leave a note!</p>";
   document.getElementById("treePanelBody").innerHTML = `
     ${tree.photo ? `<img src="${tree.photo}" class="tree-detail-photo" alt="Tree photo" />` : ""}
     <div class="tree-meta">
@@ -342,6 +358,7 @@ function openTreePanel(treeId) {
     </div>
     ${tree.notes ? `<p class="tree-notes">"${tree.notes}"</p>` : ""}
     <div style="font-size:0.8rem;color:var(--text-muted)">Reported by ${tree.reportedByName} · ${timeSince(tree.reportedAt)}${tree.address ? `<br/>📍 ${tree.address}` : ""}</div>
+    <a href="https://www.google.com/maps/dir/?api=1&destination=${tree.lat},${tree.lng}" target="_blank" rel="noopener" class="btn-secondary" style="text-align:center;text-decoration:none;display:block;padding:10px 14px;font-size:0.9rem;">🗺️ Get Directions</a>
     <div>
       <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin-bottom:8px;">Update Status</h3>
       <div class="status-btn-row">
@@ -492,9 +509,16 @@ async function openLeaderboard() {
     const { users, totalKg } = data;
     const medals = ["gold","silver","bronze"];
     document.getElementById("leaderboardList").innerHTML = `
-      <div style="background:rgba(74,124,63,0.15);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center;margin-bottom:12px;">
+      <div style="background:rgba(74,124,63,0.15);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center;margin-bottom:8px;">
         <div style="font-family:'Fraunces',serif;font-size:2rem;font-weight:900;color:var(--green-light);">${(totalKg||0).toFixed(1)}kg</div>
         <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">total fruit rescued by Warwickshire community 🍎</div>
+      </div>
+      <div style="background:rgba(212,168,67,0.1);border:1px solid rgba(212,168,67,0.3);border-radius:var(--radius-sm);padding:14px;text-align:center;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:14px;">
+        <div style="font-size:2rem;">🍎</div>
+        <div>
+          <div style="font-family:'Fraunces',serif;font-size:1.6rem;font-weight:900;color:var(--gold);line-height:1;">100kg</div>
+          <div style="font-size:0.78rem;color:var(--text-sub);margin-top:2px;">apples collected across Warwickshire in 2025</div>
+        </div>
       </div>
       ${users.length === 0
         ? `<p style="color:var(--text-muted);text-align:center">No rescuers yet — be first! 🍎</p>`
@@ -502,7 +526,7 @@ async function openLeaderboard() {
           <div class="leader-row">
             <div class="leader-rank ${medals[i]||""}">${i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div>
             <div class="leader-info">
-              <div class="leader-name">${u.name} ${u.email === "akhilakella@outlook.com" ? '<span style="font-size:0.7rem;background:rgba(212,168,67,0.2);color:var(--gold);border:1px solid rgba(212,168,67,0.4);border-radius:100px;padding:2px 8px;margin-left:4px;">👑 Dev</span>' : ""}</div>
+              <div class="leader-name" style="cursor:pointer" onclick="openUserProfile('${u.id}')">${u.name} ${u.email === "akhilakella@outlook.com" ? '<span style="font-size:0.7rem;background:rgba(212,168,67,0.2);color:var(--gold);border:1px solid rgba(212,168,67,0.4);border-radius:100px;padding:2px 8px;margin-left:4px;">👑 Dev</span>' : ""}</div>
               <div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div>
             </div>
             <div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div>
@@ -572,7 +596,7 @@ function setupNavButtons() {
 
 // ==================== PANELS ====================
 function setupPanelCloses() {
-  [["closeReport","reportPanel"],["closeTree","treePanel"],["closeProfile","profilePanel"],["closeLeaderboard","leaderboardPanel"],["closeMyTrees","myTreesPanel"],["closeContact","contactPanel"],["closeAdmin","adminPanel"],["closeUpdates","updatesPanel"]].forEach(([btnId, panelId]) => {
+  [["closeReport","reportPanel"],["closeTree","treePanel"],["closeProfile","profilePanel"],["closeLeaderboard","leaderboardPanel"],["closeMyTrees","myTreesPanel"],["closeContact","contactPanel"],["closeAdmin","adminPanel"],["closeUpdates","updatesPanel"],["closeUserProfile","userProfilePanel"]].forEach(([btnId, panelId]) => {
     document.getElementById(btnId).addEventListener("click", () => closePanel(panelId));
   });
   document.getElementById("overlay").addEventListener("click", closeAllPanels);
@@ -819,6 +843,40 @@ async function openUpdatesPanel() {
   } catch { showToast("Could not load updates"); return; }
   openPanel("updatesPanel");
 }
+
+// ==================== USER PROFILE ====================
+async function openUserProfile(userId) {
+  if (!userId) return;
+  try {
+    const res = await apiFetch(`/api/users/${userId}/profile`);
+    if (!res.ok) { showToast("Could not load profile"); return; }
+    const u = await res.json();
+    const badgeMap = { "developer":["⚙️","Developer"],"admin":["👑","Admin"],"tree-scout":["🌱","Tree Scout"],"orchard-mapper":["🗺️","Orchard Mapper"],"apple-saver":["🍎","Apple Saver"],"animal-hero":["🐾","Animal Hero"],"windfall-legend":["👑","Windfall Legend"],"gleaner":["🧺","Gleaner"] };
+    const treesAdded = allTrees.filter(t => t.reportedBy === userId);
+    const badgesHtml = (u.badges || []).length === 0
+      ? `<p style="font-size:0.85rem;color:var(--text-muted)">No badges yet</p>`
+      : (u.badges || []).map(b => { const [icon, name] = badgeMap[b] || ["⭐", b]; return `<div class="badge">${icon} ${name}</div>`; }).join("");
+    document.getElementById("userProfileBody").innerHTML = `
+      <div class="profile-card">
+        <div class="profile-avatar">${u.name.charAt(0).toUpperCase()}</div>
+        <div class="profile-name">${u.name}</div>
+        <div class="profile-email">Joined ${timeSince(u.joinedAt)}</div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-num">${(u.kgRescued||0).toFixed(1)}</div><div class="stat-lbl">kg rescued</div></div>
+        <div class="stat-box"><div class="stat-num">${u.treesReported||0}</div><div class="stat-lbl">trees mapped</div></div>
+        <div class="stat-box"><div class="stat-num">${u.pickups||0}</div><div class="stat-lbl">pickups</div></div>
+      </div>
+      <div class="badges-section"><h3>Badges</h3><div class="badges-grid">${badgesHtml}</div></div>
+      ${treesAdded.length > 0 ? `
+      <div>
+        <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin-bottom:8px;">🌳 Trees Mapped (${treesAdded.length})</h3>
+        ${treesAdded.slice(0,5).map(t => `<div class="my-tree-card" onclick="openTreePanel('${t.id}');closePanel('userProfilePanel')"><div class="my-tree-header"><span class="my-tree-type">${getFruitEmoji(t.type)} ${capitalise(t.type)} Tree</span><span class="my-tree-date">${timeSince(t.reportedAt)}</span></div></div>`).join("")}
+      </div>` : ""}`;
+    openPanel("userProfilePanel");
+  } catch { showToast("Could not load profile"); }
+}
+window.openUserProfile = openUserProfile;
 
 function openAdminPanel() {
   document.querySelectorAll("[data-admin-tab]").forEach(t => t.classList.remove("active"));
