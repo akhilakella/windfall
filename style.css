@@ -858,36 +858,3 @@ option { background: var(--green-dark); }
   width: 100%;
 }
 .comment-form textarea:focus { border-color: var(--green-light); }
-
-/* ==================== LIGHT MODE ==================== */
-body.light-mode {
-  --green-deep:   #f0f7ee;
-  --green-dark:   #dff0d8;
-  --green-mid:    #a8d5a0;
-  --green-main:   #4a7c3f;
-  --green-light:  #2a5e22;
-  --green-pale:   #4a7c3f;
-  --text-main:    #1a2e18;
-  --text-sub:     #3a6b33;
-  --text-muted:   #7aab74;
-  --border:       rgba(74,124,63,0.3);
-  --card-bg:      rgba(240,247,238,0.97);
-  --panel-bg:     #f5faf3;
-}
-body.light-mode { background: var(--green-deep); color: var(--text-main); }
-body.light-mode .top-bar { background: rgba(240,247,238,0.95); }
-body.light-mode .bottom-nav { background: rgba(240,247,238,0.98); }
-body.light-mode .filter-bar { background: rgba(240,247,238,0.92); }
-body.light-mode .legend { background: rgba(240,247,238,0.92); }
-body.light-mode .panel { background: var(--panel-bg); }
-body.light-mode .auth-container { background: rgba(240,247,238,0.95); }
-body.light-mode .field-group input,
-body.light-mode .field-group select,
-body.light-mode .field-group textarea { background: rgba(255,255,255,0.8); color: var(--text-main); }
-body.light-mode .icon-btn { background: rgba(74,124,63,0.1); }
-body.light-mode .my-tree-card { background: rgba(74,124,63,0.07); }
-body.light-mode .leader-row { background: rgba(74,124,63,0.07); }
-body.light-mode .stat-box { background: rgba(74,124,63,0.08); }
-body.light-mode .comment-row { background: rgba(74,124,63,0.07); }
-body.light-mode .profile-card { background: rgba(74,124,63,0.1); }
-body.light-mode option { background: #f5faf3; color: var(--text-main); }
