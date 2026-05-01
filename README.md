@@ -2,13 +2,13 @@
 
 > Warwickshire's community apple rescue map. Spot a tree. Pin it. Save the fruit.
 
-Built by **Akhil Akella**, age 13 — House Leader, Warwickshire Youth Council member, BBC CWR Young Hero Award winner.
+Built by **Akhil Akella**, age 13, House Leader, Warwickshire Youth Council member, BBC CWR Young Hero Award winner.
 
 ---
 
 ## What is Windfall?
 
-Every autumn, hundreds of apple trees across Warwickshire drop fruit onto pavements — rotting, wasted, crushed under car tyres. Windfall lets anyone in the community:
+Every autumn, hundreds of apple trees across Warwickshire drop fruit onto pavements, rotting, wasted, crushed under car tyres. Windfall lets anyone in the community:
 
 - 📍 **Pin trees** they spot on a live map
 - 🔴🟢🔵 **Track status** — Ready to Pick / Picked / Rotten
@@ -75,7 +75,7 @@ npm run dev
 
 ## PWA Install
 
-On mobile, visit the app URL and tap **"Add to Home Screen"** — it works like a native app with no App Store needed.
+On mobile, visit the app URL and tap **"Add to Home Screen"**, it works like a native app with no App Store needed.
 
 ---
 
