@@ -308,16 +308,34 @@ app.get("/api/admin/analytics", authMiddleware, adminMiddleware, async (req, res
   try {
     const userKeys = await redis.keys("user:*");
     const treeKeys = await redis.keys("tree:*");
-    let totalKg = 0, totalUsers = 0, totalTrees = 0;
-    const userStats = [];
+    let totalUsers = 0, totalTrees = 0;
+    const userMap = {};
+    // Build user map from user records
     for (const key of userKeys) {
       if (key.includes("email")) continue;
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       const u = JSON.parse(await redis.get(key));
-      if (u && u.name && u.status === "approved") { totalUsers++; totalKg += u.kgRescued || 0; userStats.push({ name: u.name, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0 }); }
+      if (u && u.name && u.status === "approved") {
+        totalUsers++;
+        userMap[u.id] = { name: u.name, kgRescued: 0, treesReported: 0, pickups: u.pickups || 0 };
+      }
     }
-    for (const key of treeKeys) { const parts = key.split(":"); if (parts.length !== 2) continue; totalTrees++; }
+    // Count trees and kg from actual tree records
+    for (const key of treeKeys) {
+      const parts = key.split(":");
+      if (parts.length !== 2) continue;
+      totalTrees++;
+      const t = JSON.parse(await redis.get(key));
+      if (t && t.reportedBy && userMap[t.reportedBy]) userMap[t.reportedBy].treesReported++;
+      if (t && t.pickups) {
+        for (const p of t.pickups) {
+          if (p.by && userMap[p.by]) userMap[p.by].kgRescued += p.kg || 0;
+        }
+      }
+    }
+    const totalKg = Object.values(userMap).reduce((s, u) => s + u.kgRescued, 0);
+    const userStats = Object.values(userMap);
     userStats.sort((a, b) => b.kgRescued - a.kgRescued);
     res.json({ totalKg, totalUsers, totalTrees, topUsers: userStats.slice(0, 5) });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
