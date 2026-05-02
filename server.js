@@ -387,6 +387,15 @@ app.get("/api/leaderboard", async (req, res) => {
       }
     }
     users.sort((a, b) => b.kgRescued - a.kgRescued);
+    const treeKeys = await redis.keys("tree:*");
+    const treeCounts = {};
+    for (const key of treeKeys) {
+      const parts = key.split(":");
+      if (parts.length !== 2) continue;
+      const t = JSON.parse(await redis.get(key));
+      if (t && t.reportedBy) treeCounts[t.reportedBy] = (treeCounts[t.reportedBy] || 0) + 1;
+    }
+    users.forEach(u => { u.treesReported = treeCounts[u.id] || 0; });
     res.json({ users: users.slice(0, 20), totalKg });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
