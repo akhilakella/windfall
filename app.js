@@ -848,7 +848,7 @@ async function openUserProfile(userId) {
       </div>
       <div class="stats-row">
         <div class="stat-box"><div class="stat-num">${(u.kgRescued||0).toFixed(1)}</div><div class="stat-lbl">kg rescued</div></div>
-        <div class="stat-box"><div class="stat-num">${u.treesReported||0}</div><div class="stat-lbl">trees mapped</div></div>
+        <div class="stat-box"><div class="stat-num">${treesAdded.length}</div><div class="stat-lbl">trees mapped</div></div>
         <div class="stat-box"><div class="stat-num">${u.pickups||0}</div><div class="stat-lbl">pickups</div></div>
       </div>
       <div class="badges-section"><h3>Badges</h3><div class="badges-grid">${badgesHtml}</div></div>
