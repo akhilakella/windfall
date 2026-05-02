@@ -10,11 +10,11 @@ Built by **Akhil Akella**, age 13, House Leader, Warwickshire Youth Council memb
 
 Every autumn, hundreds of apple trees across Warwickshire drop fruit onto pavements, rotting, wasted, crushed under car tyres. Windfall lets anyone in the community:
 
-- 📍 **Pin trees** they spot on a live map
-- 🔴🟢🔵 **Track status** — Ready to Pick / Picked / Rotten
-- 🧺 **Log pickups** and track how many kg of fruit they've rescued
-- 🏆 **Compete** on a community leaderboard
-- 🎖️ **Earn badges** — Tree Scout, Animal Hero, Windfall Legend...
+- **Pin trees** they spot on a live map
+- **Track status** — Ready to Pick / Picked / Rotten
+- **Log pickups** and track how many kg of fruit they've rescued
+- **Compete** on a community leaderboard
+- **Earn badges** — Tree Scout, Animal Hero, Windfall Legend...
 
 ---
 
@@ -94,11 +94,11 @@ On mobile, visit the app URL and tap **"Add to Home Screen"**, it works like a n
 
 ## Organisations to Partner With
 
-- 🌿 Warwickshire Eco Hub
-- 🍎 Friends of Dunchurch Society (FODS)
-- 🌳 Midshires Orchard Group
-- 🧺 Harvest Share (Forest of Hearts)
-- 🏛️ Warwickshire Youth Council
+- Warwickshire Eco Hub
+- Friends of Dunchurch Society (FODS)
+- Midshires Orchard Group
+- Harvest Share (Forest of Hearts)
+- Warwickshire Youth Council
 
 ---
 
