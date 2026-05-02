@@ -463,7 +463,7 @@ function updateProfilePanel() {
   document.getElementById("profileName").textContent = currentUser.name;
   document.getElementById("profileEmail").textContent = currentUser.email;
   document.getElementById("statKg").textContent = (currentUser.kgRescued || 0).toFixed(1);
-  document.getElementById("statTrees").textContent = currentUser.treesReported || 0;
+  document.getElementById("statTrees").textContent = allTrees.filter(t => t.reportedBy === currentUser.id).length;
   document.getElementById("statPickups").textContent = currentUser.pickups || 0;
   const badgeMap = {
     "developer": ["⚙️", "Developer"],
