@@ -1,5 +1,5 @@
-const CACHE = "windfall-v1";
-const STATIC = ["/", "/index.html", "/css/style.css", "/js/app.js", "/manifest.json", "/icons/icon.svg"];
+const CACHE = "windfall-v2";
+const STATIC = ["/", "/index.html", "/style.css", "/app.js", "/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC)).catch(() => {}));
