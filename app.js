@@ -10,6 +10,10 @@ let tempMarker = null;
 let allTrees = [];
 let activeTypeFilter = "all";
 let activeStatusFilter = "all";
+let publicMap = null;
+let heatLayer = null;
+let heatmapActive = false;
+let lastAnalytics = null;
 
 // ==================== INIT ====================
 document.addEventListener("DOMContentLoaded", async () => {
@@ -25,6 +29,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupFilters();
   checkResetToken();
 
+  // Public map route — show read-only map without login
+  if (window.location.pathname === "/map" && !token) {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get("token")) { openPublicMap(); return; }
+  }
+
   if (token) {
     try {
       const res = await apiFetch("/api/me");
@@ -36,6 +46,50 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function registerSW() {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
+
+// ==================== PUBLIC MAP (read-only, no login) ====================
+function openPublicMap() {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById("publicMapScreen").classList.add("active");
+  window.history.replaceState({}, "", "/map");
+  initPublicMap();
+}
+window.openPublicMap = openPublicMap;
+
+function closePublicMap() {
+  document.getElementById("publicMapScreen").classList.remove("active");
+  if (token && currentUser) {
+    document.getElementById("appScreen").classList.add("active");
+  } else {
+    document.getElementById("authScreen").classList.add("active");
+  }
+  window.history.replaceState({}, "", "/");
+}
+window.closePublicMap = closePublicMap;
+
+async function initPublicMap() {
+  if (!publicMap) {
+    publicMap = L.map("publicMap", { zoomControl: false }).setView([52.3704, -1.2655], 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap contributors", maxZoom: 19 }).addTo(publicMap);
+    L.control.zoom({ position: "bottomright" }).addTo(publicMap);
+  } else {
+    publicMap.invalidateSize();
+  }
+  try {
+    const res = await fetch("/api/trees");
+    const trees = await res.json();
+    trees.forEach(tree => {
+      const color = getStatusColor(tree.status), emoji = getFruitEmoji(tree.type);
+      const icon = L.divIcon({ className: "temp-pin", html: `<div style="width:36px;height:36px;border-radius:50%;background:${color}22;border:2.5px solid ${color};box-shadow:0 0 10px ${color}88;display:flex;align-items:center;justify-content:center;font-size:18px;">${emoji}</div>`, iconAnchor: [18, 18], popupAnchor: [0, -20] });
+      const kgText = tree.estimatedKg > 0 ? `~${tree.estimatedKg}kg · ` : "";
+      L.marker([tree.lat, tree.lng], { icon })
+        .bindPopup(`<div class="popup-title">${emoji} ${esc(capitalise(tree.type))} Tree</div><div class="popup-sub">${esc(kgText)}${esc(capitalise(tree.landType))}</div><p style="font-size:0.8rem;color:#888;margin-top:6px;">Sign in to view details &amp; log pickups 🌿</p>`)
+        .addTo(publicMap);
+    });
+    const count = trees.length;
+    document.getElementById("publicMapTreeCount").textContent = `${count} tree${count !== 1 ? "s" : ""} mapped`;
+  } catch { console.error("Could not load public trees"); }
 }
 
 // ==================== AUTH ====================
@@ -246,7 +300,7 @@ function addTreeMarker(tree) {
   const icon = L.divIcon({ className: "temp-pin", html: `<div style="position:relative;display:inline-block;"><div style="width:36px;height:36px;border-radius:50%;background:${color}22;border:2.5px solid ${color};box-shadow:0 0 10px ${color}88;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;">${emoji}</div>${verifiedBadge}</div>`, iconAnchor: [18,18], popupAnchor: [0,-20] });
   const marker = L.marker([tree.lat, tree.lng], { icon });
   const kgText = tree.estimatedKg > 0 ? `~${tree.estimatedKg}kg` : "";
-  marker.bindPopup(`<div class="popup-title">${emoji} ${capitalise(tree.type)} Tree</div><div class="popup-sub">${kgText ? kgText + " · " : ""}${capitalise(tree.landType)} · by ${tree.reportedByName}</div><button class="popup-btn" onclick="openTreePanel('${tree.id}')">View Details</button>`);
+  marker.bindPopup(`<div class="popup-title">${emoji} ${esc(capitalise(tree.type))} Tree</div><div class="popup-sub">${kgText ? esc(kgText) + " · " : ""}${esc(capitalise(tree.landType))} · by ${esc(tree.reportedByName)}</div><button class="popup-btn" onclick="openTreePanel('${esc(tree.id)}')">View Details</button>`);
   markers[tree.id] = marker;
   const typeOk = activeTypeFilter === "all" || tree.type === activeTypeFilter;
   const statusOk = activeStatusFilter === "all" || tree.status === activeStatusFilter;
@@ -329,20 +383,20 @@ function openTreePanel(treeId) {
   map.closePopup();
   const emoji = getFruitEmoji(tree.type);
   document.getElementById("treePanelTitle").textContent = `${emoji} ${capitalise(tree.type)} Tree`;
-  const pickupList = (tree.pickups || []).map(p => `<div class="pickup-row"><span>${p.byName}</span><span>${p.kg}kg · ${timeSince(p.at)}</span></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet — be the first!</p>";
-  const commentList = (tree.comments || []).map(c => `<div class="comment-row"><span class="comment-name" style="cursor:pointer" onclick="openUserProfile('${c.userId}')">${c.userName}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${c.text}</p></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No comments yet — leave a note!</p>";
+  const pickupList = (tree.pickups || []).map(p => `<div class="pickup-row"><span>${esc(p.byName)}</span><span>${esc(p.kg)}kg · ${timeSince(p.at)}</span></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet — be the first!</p>";
+  const commentList = (tree.comments || []).map(c => `<div class="comment-row"><span class="comment-name" style="cursor:pointer" onclick="openUserProfile('${esc(c.userId)}')">${esc(c.userName)}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${esc(c.text)}</p></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No comments yet — leave a note!</p>";
   document.getElementById("treePanelBody").innerHTML = `
-    ${tree.photo ? `<img src="${tree.photo}" class="tree-detail-photo" alt="Tree photo" />` : ""}
+    ${tree.photo ? `<img src="${esc(tree.photo)}" class="tree-detail-photo" alt="Tree photo" />` : ""}
     <div class="tree-meta">
-      <span class="tree-chip">${emoji} ${capitalise(tree.type)}</span>
-      <span class="tree-chip">📍 ${capitalise(tree.landType)}</span>
-      ${tree.estimatedKg > 0 ? `<span class="tree-chip">~${tree.estimatedKg}kg</span>` : ""}
-      <span class="tree-status-chip status-${tree.status}">${capitalise(tree.status)}</span>
+      <span class="tree-chip">${emoji} ${esc(capitalise(tree.type))}</span>
+      <span class="tree-chip">📍 ${esc(capitalise(tree.landType))}</span>
+      ${tree.estimatedKg > 0 ? `<span class="tree-chip">~${esc(tree.estimatedKg)}kg</span>` : ""}
+      <span class="tree-status-chip status-${esc(tree.status)}">${esc(capitalise(tree.status))}</span>
       ${tree.verified ? '<span class="tree-chip" style="background:rgba(76,175,80,0.15);color:#81c784;border-color:rgba(76,175,80,0.35);">✅ Verified</span>' : ""}
     </div>
-    ${tree.notes ? `<p class="tree-notes">"${tree.notes}"</p>` : ""}
-    <div style="font-size:0.8rem;color:var(--text-muted)">Reported by ${tree.reportedByName} · ${timeSince(tree.reportedAt)}${tree.address ? `<br/>📍 ${tree.address}` : ""}</div>
-    <a href="https://www.google.com/maps/dir/?api=1&destination=${tree.lat},${tree.lng}" target="_blank" rel="noopener" class="btn-secondary" style="text-align:center;text-decoration:none;display:block;padding:10px 14px;font-size:0.9rem;">🗺️ Get Directions</a>
+    ${tree.notes ? `<p class="tree-notes">"${esc(tree.notes)}"</p>` : ""}
+    <div style="font-size:0.8rem;color:var(--text-muted)">Reported by ${esc(tree.reportedByName)} · ${timeSince(tree.reportedAt)}${tree.address ? `<br/>📍 ${esc(tree.address)}` : ""}</div>
+    <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(tree.lat)},${encodeURIComponent(tree.lng)}" target="_blank" rel="noopener" class="btn-secondary" style="text-align:center;text-decoration:none;display:block;padding:10px 14px;font-size:0.9rem;">🗺️ Get Directions</a>
     <div>
       <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin-bottom:8px;">Update Status</h3>
       <div class="status-btn-row">
@@ -422,7 +476,7 @@ async function addComment(treeId) {
     const listEl = document.getElementById(`commentList-${treeId}`);
     if (listEl) {
       const comments = allTrees[treeIdx]?.comments || [];
-      listEl.innerHTML = comments.map(c => `<div class="comment-row"><span class="comment-name">${c.userName}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${c.text}</p></div>`).join("");
+      listEl.innerHTML = comments.map(c => `<div class="comment-row"><span class="comment-name">${esc(c.userName)}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${esc(c.text)}</p></div>`).join("");
     }
     showToast("Comment posted! 💬");
   } catch { showToast("Failed to post comment"); }
@@ -460,8 +514,8 @@ function showPassMsg(text, success) {
 
 function updateProfilePanel() {
   if (!currentUser) return;
-  document.getElementById("profileName").textContent = currentUser.name;
-  document.getElementById("profileEmail").textContent = currentUser.email;
+  document.getElementById("profileName").textContent = currentUser.name || "";
+  document.getElementById("profileEmail").textContent = currentUser.email || "";
   document.getElementById("statKg").textContent = (currentUser.kgRescued || 0).toFixed(1);
   document.getElementById("statTrees").textContent = allTrees.filter(t => t.reportedBy === currentUser.id).length;
   document.getElementById("statPickups").textContent = currentUser.pickups || 0;
@@ -510,7 +564,7 @@ async function openLeaderboard() {
           <div class="leader-row">
             <div class="leader-rank ${medals[i]||""}">${i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div>
             <div class="leader-info">
-              <div class="leader-name" style="cursor:pointer" onclick="openUserProfile('${u.id}')">${u.name} ${u.email === "akhilakella@outlook.com" ? '<span style="font-size:0.7rem;background:rgba(212,168,67,0.2);color:var(--gold);border:1px solid rgba(212,168,67,0.4);border-radius:100px;padding:2px 8px;margin-left:4px;">👑 Dev</span>' : ""}</div>
+              <div class="leader-name" style="cursor:pointer" onclick="openUserProfile('${esc(u.id)}')">${esc(u.name)} ${u.email === "akhilakella@outlook.com" ? '<span style="font-size:0.7rem;background:rgba(212,168,67,0.2);color:var(--gold);border:1px solid rgba(212,168,67,0.4);border-radius:100px;padding:2px 8px;margin-left:4px;">👑 Dev</span>' : ""}</div>
               <div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div>
             </div>
             <div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div>
@@ -524,7 +578,7 @@ function openMyTrees() {
   const mine = allTrees.filter(t => t.reportedBy === currentUser.id);
   document.getElementById("myTreesList").innerHTML = mine.length === 0
     ? `<p style="color:var(--text-muted);text-align:center">You haven't reported any trees yet!<br><br>Tap the ＋ button to get started. 🌱</p>`
-    : mine.map(t => `<div class="my-tree-card" onclick="openTreePanel('${t.id}');closePanel('myTreesPanel')"><div class="my-tree-header"><span class="my-tree-type">${getFruitEmoji(t.type)} ${capitalise(t.type)} Tree</span><span class="my-tree-date">${timeSince(t.reportedAt)}</span></div><div class="my-tree-notes">${t.notes || "No notes"}</div></div>`).join("");
+    : mine.map(t => `<div class="my-tree-card" onclick="openTreePanel('${esc(t.id)}');closePanel('myTreesPanel')"><div class="my-tree-header"><span class="my-tree-type">${getFruitEmoji(t.type)} ${esc(capitalise(t.type))} Tree</span><span class="my-tree-date">${timeSince(t.reportedAt)}</span></div><div class="my-tree-notes">${t.notes ? esc(t.notes) : "No notes"}</div></div>`).join("");
   openPanel("myTreesPanel");
 }
 window.openMyTrees = openMyTrees;
@@ -560,6 +614,44 @@ function applyFilters() {
     else { if (map.hasLayer(marker)) map.removeLayer(marker); }
   });
 }
+
+// ==================== HEATMAP ====================
+function toggleHeatmap() {
+  if (!map) return;
+  if (typeof L.heatLayer !== "function") { showToast("Heatmap not loaded yet — try again in a moment"); return; }
+  heatmapActive = !heatmapActive;
+  const btn = document.getElementById("heatmapBtn");
+  if (heatmapActive) {
+    // Build intensity points: use actual kg rescued, fall back to estimatedKg, then default 5
+    const points = allTrees.map(t => {
+      const kgTotal = (t.pickups || []).reduce((s, p) => s + (p.kg || 0), 0) || t.estimatedKg || 5;
+      return [t.lat, t.lng, Math.min(kgTotal / 30, 1.0)];
+    });
+    if (!heatLayer) {
+      heatLayer = L.heatLayer(points, {
+        radius: 38, blur: 28, maxZoom: 17,
+        gradient: { 0.0: "#0d2b0d", 0.35: "#2d6a2d", 0.6: "#6abf6a", 1.0: "#d4e84c" }
+      });
+    } else {
+      heatLayer.setLatLngs(points);
+    }
+    heatLayer.addTo(map);
+    // Hide individual markers while heatmap is on
+    Object.values(markers).forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
+    btn.style.background = "rgba(74,124,63,0.55)";
+    btn.style.borderRadius = "8px";
+    btn.title = "Hide heatmap";
+    showToast("🌡️ Heatmap on — brighter = more fruit");
+  } else {
+    if (heatLayer) map.removeLayer(heatLayer);
+    applyFilters(); // restore markers
+    btn.style.background = "";
+    btn.style.borderRadius = "";
+    btn.title = "Show heatmap";
+    showToast("Heatmap off");
+  }
+}
+window.toggleHeatmap = toggleHeatmap;
 
 // ==================== NAV ====================
 function setupNavButtons() {
@@ -642,12 +734,12 @@ async function loadAdminRequests() {
       : data.map(u => `
           <div class="my-tree-card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
             <div>
-              <div class="my-tree-type" style="font-size:0.9rem;">${u.name}</div>
-              <div class="my-tree-notes">${u.email} · ${timeSince(u.joinedAt)}</div>
+              <div class="my-tree-type" style="font-size:0.9rem;">${esc(u.name)}</div>
+              <div class="my-tree-notes">${esc(u.email)} · ${timeSince(u.joinedAt)}</div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;">
-              <button onclick="approveUser('${u.id}')" style="background:rgba(76,175,80,0.2);border:1px solid rgba(76,175,80,0.4);color:#81c784;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✅ Approve</button>
-              <button onclick="rejectUser('${u.id}', '${u.name}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✕ Reject</button>
+              <button onclick="approveUser('${esc(u.id)}')" style="background:rgba(76,175,80,0.2);border:1px solid rgba(76,175,80,0.4);color:#81c784;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✅ Approve</button>
+              <button onclick="rejectUser('${esc(u.id)}', ${JSON.stringify(esc(u.name))})" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✕ Reject</button>
             </div>
           </div>`).join("");
   } catch { showToast("Could not load requests"); }
@@ -676,12 +768,13 @@ async function loadAdminAnalytics() {
   try {
     const res = await apiFetch("/api/admin/analytics");
     const data = await res.json();
+    lastAnalytics = data; // stored for year card generation
     document.getElementById("aStat-kg").textContent = (data.totalKg || 0).toFixed(1);
     document.getElementById("aStat-trees").textContent = data.totalTrees || 0;
     document.getElementById("aStat-users").textContent = data.totalUsers || 0;
     document.getElementById("adminTopUsers").innerHTML = (data.topUsers || []).length === 0
       ? `<p style="color:var(--text-muted);font-size:0.85rem">No users yet</p>`
-      : data.topUsers.map((u, i) => `<div class="leader-row"><div class="leader-rank">${i+1}</div><div class="leader-info"><div class="leader-name">${u.name}</div><div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div></div><div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div></div>`).join("");
+      : data.topUsers.map((u, i) => `<div class="leader-row"><div class="leader-rank">${i+1}</div><div class="leader-info"><div class="leader-name">${esc(u.name)}</div><div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div></div><div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div></div>`).join("");
   } catch { showToast("Could not load analytics"); }
 }
 
@@ -692,20 +785,20 @@ function loadAdminTrees() {
         <div class="my-tree-card">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
             <div>
-              <div class="my-tree-type">${getFruitEmoji(t.type)} ${capitalise(t.type)}</div>
-              <div class="my-tree-notes">by ${t.reportedByName} · ${t.address || "No address"}</div>
+              <div class="my-tree-type">${getFruitEmoji(t.type)} ${esc(capitalise(t.type))}</div>
+              <div class="my-tree-notes">by ${esc(t.reportedByName)} · ${esc(t.address || "No address")}</div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;">
-              <button onclick="toggleVerifyTree('${t.id}', ${!t.verified})" title="${t.verified ? 'Remove verification' : 'Mark as verified'}" style="background:${t.verified ? 'rgba(212,168,67,0.2)' : 'rgba(76,175,80,0.2)'};border:1px solid ${t.verified ? 'rgba(212,168,67,0.4)' : 'rgba(76,175,80,0.4)'};color:${t.verified ? 'var(--gold)' : '#81c784'};border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">${t.verified ? '🔓' : '✅'}</button>
-              <button onclick="openEditTree('${t.id}')" style="background:rgba(74,124,63,0.2);border:1px solid var(--border);color:var(--green-light);border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✏️</button>
-              <button onclick="deleteTree('${t.id}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">🗑</button>
+              <button onclick="toggleVerifyTree('${esc(t.id)}', ${!t.verified})" title="${t.verified ? 'Remove verification' : 'Mark as verified'}" style="background:${t.verified ? 'rgba(212,168,67,0.2)' : 'rgba(76,175,80,0.2)'};border:1px solid ${t.verified ? 'rgba(212,168,67,0.4)' : 'rgba(76,175,80,0.4)'};color:${t.verified ? 'var(--gold)' : '#81c784'};border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">${t.verified ? '🔓' : '✅'}</button>
+              <button onclick="openEditTree('${esc(t.id)}')" style="background:rgba(74,124,63,0.2);border:1px solid var(--border);color:var(--green-light);border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✏️</button>
+              <button onclick="deleteTree('${esc(t.id)}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">🗑</button>
             </div>
           </div>
-          <div id="editForm-${t.id}" style="display:none;flex-direction:column;gap:8px;margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
-            <input type="text" id="editNotes-${t.id}" value="${t.notes||""}" placeholder="Notes" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
-            <input type="text" id="editAddress-${t.id}" value="${t.address||""}" placeholder="Address" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
-            <input type="number" id="editKg-${t.id}" value="${t.estimatedKg||0}" placeholder="Estimated kg" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
-            <button onclick="saveEditTree('${t.id}')" class="btn-primary btn-sm">💾 Save</button>
+          <div id="editForm-${esc(t.id)}" style="display:none;flex-direction:column;gap:8px;margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+            <input type="text" id="editNotes-${esc(t.id)}" value="${esc(t.notes||"")}" placeholder="Notes" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
+            <input type="text" id="editAddress-${esc(t.id)}" value="${esc(t.address||"")}" placeholder="Address" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
+            <input type="number" id="editKg-${esc(t.id)}" value="${esc(t.estimatedKg||0)}" placeholder="Estimated kg" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-main);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;" />
+            <button onclick="saveEditTree('${esc(t.id)}')" class="btn-primary btn-sm">💾 Save</button>
           </div>
         </div>`).join("");
 }
@@ -763,10 +856,10 @@ async function loadAdminUsers() {
       : users.map(u => `
           <div class="my-tree-card" style="display:flex;justify-content:space-between;align-items:center;">
             <div>
-              <div class="my-tree-type" style="font-size:0.9rem;">${u.name}</div>
-              <div class="my-tree-notes">${u.email} · ${u.kgRescued.toFixed(1)}kg · ${u.treesReported} trees</div>
+              <div class="my-tree-type" style="font-size:0.9rem;">${esc(u.name)}</div>
+              <div class="my-tree-notes">${esc(u.email)} · ${u.kgRescued.toFixed(1)}kg · ${u.treesReported} trees</div>
             </div>
-            ${u.email !== "akhilakella@outlook.com" ? `<button onclick="deleteUser('${u.id}','${u.name}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;flex-shrink:0;margin-left:10px;">🗑</button>` : `<span style="font-size:0.75rem;color:var(--gold);flex-shrink:0;">👑 Admin</span>`}
+            ${u.email !== "akhilakella@outlook.com" ? `<button onclick="deleteUser('${esc(u.id)}', ${JSON.stringify(esc(u.name))})" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;flex-shrink:0;margin-left:10px;">🗑</button>` : `<span style="font-size:0.75rem;color:var(--gold);flex-shrink:0;">👑 Admin</span>`}
           </div>`).join("");
   } catch { showToast("Could not load users"); }
 }
@@ -791,12 +884,12 @@ async function loadAdminAnnouncements() {
           <div class="my-tree-card" style="gap:6px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;">
               <div>
-                <div class="my-tree-type" style="font-size:0.9rem;">${p.title}</div>
+                <div class="my-tree-type" style="font-size:0.9rem;">${esc(p.title)}</div>
                 <div class="my-tree-notes">${timeSince(p.postedAt)}</div>
               </div>
-              <button onclick="deleteAnnouncement('${p.id}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:4px 9px;font-size:0.78rem;cursor:pointer;flex-shrink:0;margin-left:8px;">🗑</button>
+              <button onclick="deleteAnnouncement('${esc(p.id)}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:4px 9px;font-size:0.78rem;cursor:pointer;flex-shrink:0;margin-left:8px;">🗑</button>
             </div>
-            <div class="my-tree-notes" style="margin-top:4px;">${p.body}</div>
+            <div class="my-tree-notes" style="margin-top:4px;">${esc(p.body)}</div>
           </div>`).join("");
   } catch {}
 }
@@ -819,10 +912,10 @@ async function openUpdatesPanel() {
       : posts.map(p => `
           <div class="my-tree-card" style="cursor:default;">
             <div class="my-tree-header">
-              <span class="my-tree-type">${p.title}</span>
+              <span class="my-tree-type">${esc(p.title)}</span>
               <span class="my-tree-date">${timeSince(p.postedAt)}</span>
             </div>
-            <div class="my-tree-notes" style="margin-top:4px;line-height:1.5;">${p.body}</div>
+            <div class="my-tree-notes" style="margin-top:4px;line-height:1.5;">${esc(p.body)}</div>
           </div>`).join("");
   } catch { showToast("Could not load updates"); return; }
   openPanel("updatesPanel");
@@ -842,8 +935,8 @@ async function openUserProfile(userId) {
       : (u.badges || []).map(b => { const [icon, name] = badgeMap[b] || ["⭐", b]; return `<div class="badge">${icon} ${name}</div>`; }).join("");
     document.getElementById("userProfileBody").innerHTML = `
       <div class="profile-card">
-        <div class="profile-avatar">${u.name.charAt(0).toUpperCase()}</div>
-        <div class="profile-name">${u.name}</div>
+        <div class="profile-avatar">${esc((u.name||"?").charAt(0).toUpperCase())}</div>
+        <div class="profile-name">${esc(u.name)}</div>
         <div class="profile-email">Joined ${timeSince(u.joinedAt)}</div>
       </div>
       <div class="stats-row">
@@ -855,7 +948,7 @@ async function openUserProfile(userId) {
       ${treesAdded.length > 0 ? `
       <div>
         <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin-bottom:8px;">🌳 Trees Mapped (${treesAdded.length})</h3>
-        ${treesAdded.slice(0,5).map(t => `<div class="my-tree-card" onclick="openTreePanel('${t.id}');closePanel('userProfilePanel')"><div class="my-tree-header"><span class="my-tree-type">${getFruitEmoji(t.type)} ${capitalise(t.type)} Tree</span><span class="my-tree-date">${timeSince(t.reportedAt)}</span></div></div>`).join("")}
+        ${treesAdded.slice(0,5).map(t => `<div class="my-tree-card" onclick="openTreePanel('${esc(t.id)}');closePanel('userProfilePanel')"><div class="my-tree-header"><span class="my-tree-type">${getFruitEmoji(t.type)} ${esc(capitalise(t.type))} Tree</span><span class="my-tree-date">${timeSince(t.reportedAt)}</span></div></div>`).join("")}
       </div>` : ""}`;
     openPanel("userProfilePanel");
   } catch { showToast("Could not load profile"); }
@@ -891,13 +984,162 @@ document.getElementById("aiCheckBtn").addEventListener("click", async () => {
     const response = await fetch("/api/ai-check", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ imageBase64: base64, mediaType }) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
-    resultDiv.className = `ai-result grade-${result.grade}`;
-    resultDiv.innerHTML = `<div class="ai-result-header">${result.emoji} ${result.headline}</div><p>${result.summary}</p><p style="margin-top:8px;opacity:0.8">💡 ${result.tips}</p>`;
+    const safeGrade = ["good","ok","bad"].includes(result.grade) ? result.grade : "ok";
+    resultDiv.className = `ai-result grade-${safeGrade}`;
+    resultDiv.innerHTML = `<div class="ai-result-header">${esc(result.emoji)} ${esc(result.headline)}</div><p>${esc(result.summary)}</p><p style="margin-top:8px;opacity:0.8">💡 ${esc(result.tips)}</p>`;
   } catch (err) {
     resultDiv.className = "ai-result grade-ok";
     resultDiv.innerHTML = `<div class="ai-result-header">⚠️ Check unavailable</div><p>Could not analyse the photo right now. You can still submit the tree!</p>`;
   }
 });
+
+// ==================== CSV EXPORT ====================
+function downloadCSV(type) {
+  if (type === "trees") {
+    const headers = ["ID","Type","Land Type","Status","Lat","Lng","Address","Estimated Kg","Total Kg Rescued","Total Pickups","Reported By","Reported At","Verified","Notes"];
+    const rows = allTrees.map(t => {
+      const totalKg = (t.pickups || []).reduce((s, p) => s + (p.kg || 0), 0);
+      return [t.id, t.type, t.landType, t.status, t.lat, t.lng, t.address || "", t.estimatedKg || 0, totalKg.toFixed(1), (t.pickups || []).length, t.reportedByName, new Date(t.reportedAt).toISOString(), t.verified ? "Yes" : "No", t.notes || ""];
+    });
+    buildAndDownloadCSV("windfall-trees.csv", headers, rows);
+  } else if (type === "users") {
+    apiFetch("/api/admin/users").then(r => r.json()).then(users => {
+      const headers = ["Name","Email","Kg Rescued","Trees Reported","Pickups","Joined"];
+      const rows = users.map(u => [u.name, u.email, (u.kgRescued || 0).toFixed(1), u.treesReported, u.pickups, new Date(u.joinedAt).toISOString()]);
+      buildAndDownloadCSV("windfall-users.csv", headers, rows);
+    }).catch(() => showToast("Could not fetch user data for export"));
+  }
+}
+window.downloadCSV = downloadCSV;
+
+function buildAndDownloadCSV(filename, headers, rows) {
+  const lines = [headers, ...rows].map(row =>
+    row.map(v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`).join(",")
+  );
+  const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  showToast(`📥 ${filename} downloaded!`);
+}
+
+// ==================== YEAR RECAP CARD ====================
+async function showYearCard() {
+  if (!lastAnalytics) {
+    setYearCardLoading(true);
+    try {
+      const res = await apiFetch("/api/admin/analytics");
+      if (!res.ok) { showToast("Could not load stats"); setYearCardLoading(false); return; }
+      lastAnalytics = await res.json();
+    } catch { showToast("Could not load stats"); setYearCardLoading(false); return; }
+  }
+  const panel = document.getElementById("yearCardPanel");
+  panel.style.display = "flex";
+  drawYearCard();
+}
+window.showYearCard = showYearCard;
+
+function setYearCardLoading(on) {
+  const panel = document.getElementById("yearCardPanel");
+  if (on) { panel.style.display = "flex"; panel.dataset.loading = "1"; }
+  else { panel.dataset.loading = ""; }
+}
+
+function drawYearCard() {
+  const year = new Date().getFullYear();
+  const kg = (lastAnalytics.totalKg || 0).toFixed(1);
+  const trees = lastAnalytics.totalTrees || 0;
+  const users = lastAnalytics.totalUsers || 0;
+
+  const canvas = document.getElementById("yearCardCanvas");
+  canvas.width = 1200; canvas.height = 630;
+  const ctx = canvas.getContext("2d");
+
+  // Background gradient
+  const bg = ctx.createLinearGradient(0, 0, 1200, 630);
+  bg.addColorStop(0, "#060f06"); bg.addColorStop(1, "#122112");
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 630);
+
+  // Decorative circles
+  [[1150, 0, 280, "rgba(74,124,63,0.18)"], [1080, 0, 160, "rgba(74,124,63,0.12)"], [80, 630, 220, "rgba(74,124,63,0.1)"]].forEach(([x,y,r,c]) => {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill();
+  });
+
+  // Left accent bar
+  ctx.fillStyle = "#4a7c3f"; ctx.fillRect(72, 72, 7, 130);
+
+  // Brand name
+  ctx.font = "bold 76px Georgia, serif";
+  ctx.fillStyle = "#e8f0e6";
+  ctx.fillText("Windfall", 100, 155);
+
+  // Subtitle
+  ctx.font = "30px sans-serif";
+  ctx.fillStyle = "#7cb87c";
+  ctx.fillText("Warwickshire Community Apple Rescue  •  " + year, 100, 200);
+
+  // Divider
+  ctx.fillStyle = "rgba(255,255,255,0.07)"; ctx.fillRect(72, 224, 1056, 1);
+
+  // Big kg number
+  ctx.font = "bold 175px Georgia, serif";
+  ctx.fillStyle = "#3d6b35";
+  ctx.fillText(kg, 72, 430);
+
+  ctx.font = "bold 50px sans-serif";
+  ctx.fillStyle = "#c8e6c9";
+  ctx.fillText("kg of fruit rescued from the streets", 72, 490);
+
+  // Stat chips
+  const chips = ["🌳 " + trees + " trees mapped", "👤 " + users + " rescuers"];
+  let cx = 72;
+  chips.forEach(text => {
+    const tw = ctx.measureText(text).width;
+    ctx.fillStyle = "rgba(74,124,63,0.28)";
+    rrect(ctx, cx - 10, 520, tw + 30, 44, 22); ctx.fill();
+    ctx.strokeStyle = "rgba(74,124,63,0.55)"; ctx.lineWidth = 1.5;
+    rrect(ctx, cx - 10, 520, tw + 30, 44, 22); ctx.stroke();
+    ctx.font = "26px sans-serif"; ctx.fillStyle = "#a5d6a7";
+    ctx.fillText(text, cx + 6, 548);
+    cx += tw + 56;
+  });
+
+  // URL footer
+  ctx.font = "22px sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.2)";
+  ctx.fillText("windfall-jvc3.onrender.com", 72, 608);
+
+  // Community badge (top right)
+  ctx.fillStyle = "rgba(74,124,63,0.22)";
+  rrect(ctx, 900, 56, 256, 54, 27); ctx.fill();
+  ctx.strokeStyle = "rgba(74,124,63,0.5)"; ctx.lineWidth = 1.5;
+  rrect(ctx, 900, 56, 256, 54, 27); ctx.stroke();
+  ctx.font = "bold 21px sans-serif"; ctx.fillStyle = "#81c784"; ctx.textAlign = "center";
+  ctx.fillText("Community Powered ♥", 1028, 89); ctx.textAlign = "left";
+}
+
+function rrect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function downloadYearCard() {
+  const canvas = document.getElementById("yearCardCanvas");
+  const a = document.createElement("a");
+  a.download = `windfall-${new Date().getFullYear()}.png`;
+  a.href = canvas.toDataURL("image/png");
+  a.click();
+  showToast("🎴 Year card saved!");
+}
+window.downloadYearCard = downloadYearCard;
 
 // ==================== HELPERS ====================
 async function apiFetch(url, opts = {}) {
@@ -906,6 +1148,7 @@ async function apiFetch(url, opts = {}) {
 
 function val(id) { return document.getElementById(id).value.trim(); }
 function showErr(el, msg) { el.textContent = msg; el.classList.remove("hidden"); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
 
 function setLoading(id, loading, label) {
   const btn = document.getElementById(id);
