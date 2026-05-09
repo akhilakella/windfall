@@ -118,13 +118,17 @@ app.post("/api/forgot-password", async (req, res) => {
     const resetToken = uuidv4();
     await redis.set(`reset:${resetToken}`, userId, "EX", 3600);
     const resetUrl = `${process.env.APP_URL || "https://windfall-jvc3.onrender.com"}/reset-password?token=${resetToken}`;
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.RESEND_API_KEY}` },
-      body: JSON.stringify({ from: "Windfall <onboarding@resend.dev>", to: email.toLowerCase(), subject: "Reset your Windfall password", html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0f1a0e;color:#e8f0e6;border-radius:16px;"><h1>🍎 Windfall</h1><p>Click below to reset your password. Expires in 1 hour.</p><a href="${resetUrl}" style="display:inline-block;background:#4a7c3f;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;">Reset Password</a></div>` })
-    });
+    try {
+      if (process.env.RESEND_API_KEY) {
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.RESEND_API_KEY}` },
+          body: JSON.stringify({ from: "Windfall <onboarding@resend.dev>", to: email.toLowerCase(), subject: "Reset your Windfall password", html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0f1a0e;color:#e8f0e6;border-radius:16px;"><h1>🍎 Windfall</h1><p>Click below to reset your password. Expires in 1 hour.</p><a href="${resetUrl}" style="display:inline-block;background:#4a7c3f;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;">Reset Password</a></div>` })
+        });
+      }
+    } catch (e) { console.error("Email send failed:", e); }
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
+  } catch (err) { console.error(err); res.json({ success: true }); }
 });
 
 app.post("/api/reset-password", async (req, res) => {
@@ -440,7 +444,7 @@ app.post("/api/ai-check", authMiddleware, async (req, res) => {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`, "HTTP-Referer": "https://windfall-jvc3.onrender.com", "X-Title": "Windfall" },
-      body: JSON.stringify({ model: "openrouter/free", messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } }, { type: "text", text: `You are a fruit quality checker for a community apple rescue app in Rugby, UK. Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):\n{"grade":"good","emoji":"🍎","headline":"one short headline","summary":"2-3 sentences about quality and suitability for animals or humans","tips":"one practical tip"}\nUse grade: good=fresh/ripe/suitable, ok=slightly damaged but usable for animals/cider, bad=rotten/mouldy/unsafe. Use emoji 🍎 for good, ⚠️ for ok, 🚫 for bad.` }] }], max_tokens: 300 })
+      body: JSON.stringify({ model: process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free", messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } }, { type: "text", text: `You are a fruit quality checker for a community apple rescue app in Rugby, UK. Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):\n{"grade":"good","emoji":"🍎","headline":"one short headline","summary":"2-3 sentences about quality and suitability for animals or humans","tips":"one practical tip"}\nUse grade: good=fresh/ripe/suitable, ok=slightly damaged but usable for animals/cider, bad=rotten/mouldy/unsafe. Use emoji 🍎 for good, ⚠️ for ok, 🚫 for bad.` }] }], max_tokens: 300 })
     });
     const data = await response.json();
     const text = data.choices?.[0]?.message?.content || "";
