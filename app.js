@@ -1036,7 +1036,14 @@ async function showYearCard() {
   }
   const panel = document.getElementById("yearCardPanel");
   panel.style.display = "flex";
-  drawYearCard();
+  // Load the logo onto the canvas
+  const logoImg = await new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = "/icon-192.png";
+  });
+  drawYearCard(logoImg);
 }
 window.showYearCard = showYearCard;
 
@@ -1046,7 +1053,7 @@ function setYearCardLoading(on) {
   else { panel.dataset.loading = ""; }
 }
 
-function drawYearCard() {
+function drawYearCard(logoImg) {
   const year = new Date().getFullYear();
   const kg = (lastAnalytics.totalKg || 0).toFixed(1);
   const trees = lastAnalytics.totalTrees || 0;
@@ -1066,21 +1073,27 @@ function drawYearCard() {
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill();
   });
 
-  // Left accent bar
-  ctx.fillStyle = "#4a7c3f"; ctx.fillRect(72, 72, 7, 130);
-
-  // Brand name
-  ctx.font = "bold 76px Georgia, serif";
-  ctx.fillStyle = "#e8f0e6";
-  ctx.fillText("Windfall", 100, 155);
-
-  // Subtitle
-  ctx.font = "30px sans-serif";
-  ctx.fillStyle = "#7cb87c";
-  ctx.fillText("Warwickshire Community Apple Rescue  •  " + year, 100, 200);
+  // Brand: logo + name
+  if (logoImg) {
+    ctx.drawImage(logoImg, 72, 58, 96, 96);
+    ctx.font = "bold 74px Georgia, serif";
+    ctx.fillStyle = "#e8f0e6";
+    ctx.fillText("Windfall", 182, 125);
+    ctx.font = "27px sans-serif";
+    ctx.fillStyle = "#7cb87c";
+    ctx.fillText("Warwickshire Community Apple Rescue  •  " + year, 182, 165);
+  } else {
+    ctx.fillStyle = "#4a7c3f"; ctx.fillRect(72, 72, 7, 130);
+    ctx.font = "bold 76px Georgia, serif";
+    ctx.fillStyle = "#e8f0e6";
+    ctx.fillText("Windfall", 100, 155);
+    ctx.font = "30px sans-serif";
+    ctx.fillStyle = "#7cb87c";
+    ctx.fillText("Warwickshire Community Apple Rescue  •  " + year, 100, 200);
+  }
 
   // Divider
-  ctx.fillStyle = "rgba(255,255,255,0.07)"; ctx.fillRect(72, 224, 1056, 1);
+  ctx.fillStyle = "rgba(255,255,255,0.07)"; ctx.fillRect(72, 200, 1056, 1);
 
   // Big kg number
   ctx.font = "bold 175px Georgia, serif";
