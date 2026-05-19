@@ -82,7 +82,7 @@ html, body {
 }
 
 .auth-logo { text-align: center; margin-bottom: 28px; }
-.auth-icon { width: 64px; height: 64px; margin-bottom: 12px; filter: drop-shadow(0 4px 12px rgba(74,124,63,0.5)); }
+.auth-icon { width: 160px; height: 160px; margin-bottom: 4px; object-fit: contain; filter: drop-shadow(0 4px 16px rgba(74,124,63,0.45)); }
 
 .logo-text {
   font-family: 'Fraunces', serif;
