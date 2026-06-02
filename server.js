@@ -441,15 +441,33 @@ app.post("/api/ai-check", authMiddleware, async (req, res) => {
   try {
     const { imageBase64, mediaType } = req.body;
     if (!imageBase64 || !mediaType) return res.status(400).json({ error: "Missing image data" });
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`, "HTTP-Referer": "https://windfall-jvc3.onrender.com", "X-Title": "Windfall" },
-      body: JSON.stringify({ model: process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free", messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } }, { type: "text", text: `You are a fruit quality checker for a community apple rescue app in Rugby, UK. Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):\n{"grade":"good","emoji":"🍎","headline":"one short headline","summary":"2-3 sentences about quality and suitability for animals or humans","tips":"one practical tip"}\nUse grade: good=fresh/ripe/suitable, ok=slightly damaged but usable for animals/cider, bad=rotten/mouldy/unsafe. Use emoji 🍎 for good, ⚠️ for ok, 🚫 for bad.` }] }], max_tokens: 300 })
-    });
-    const data = await response.json();
-    const text = data.choices?.[0]?.message?.content || "";
-    try { res.json(JSON.parse(text.replace(/```json|```/g, "").trim())); }
-    catch { res.status(500).json({ error: "Could not parse AI response" }); }
+    if (!process.env.OPENROUTER_API_KEY) {
+      console.error("OPENROUTER_API_KEY is not set");
+      return res.status(503).json({ error: "AI checker not configured" });
+    }
+    const prompt = `You are a fruit quality checker for a community apple rescue app in Rugby, UK. Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):\n{"grade":"good","emoji":"🍎","headline":"one short headline","summary":"2-3 sentences about quality and suitability for animals or humans","tips":"one practical tip"}\nUse grade: good=fresh/ripe/suitable, ok=slightly damaged but usable for animals/cider, bad=rotten/mouldy/unsafe. Use emoji 🍎 for good, ⚠️ for ok, 🚫 for bad.`;
+    const models = [
+      process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free",
+      "google/gemini-flash-1.5-8b:free",
+      "meta-llama/llama-3.2-11b-vision-instruct:free"
+    ];
+    let lastError = "AI check failed";
+    for (const model of models) {
+      try {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`, "HTTP-Referer": "https://windfall-jvc3.onrender.com", "X-Title": "Windfall" },
+          body: JSON.stringify({ model, messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } }, { type: "text", text: prompt }] }], max_tokens: 300 })
+        });
+        const data = await response.json();
+        if (!response.ok) { console.error(`AI model ${model} error:`, JSON.stringify(data)); lastError = data.error?.message || `Model error`; continue; }
+        const text = data.choices?.[0]?.message?.content || "";
+        if (!text) { lastError = "Empty AI response"; continue; }
+        try { return res.json(JSON.parse(text.replace(/```json|```/g, "").trim())); }
+        catch { lastError = "Could not parse AI response"; continue; }
+      } catch (e) { console.error(`AI model ${model} threw:`, e.message); lastError = e.message; }
+    }
+    res.status(500).json({ error: lastError });
   } catch (err) { console.error("AI check error:", err); res.status(500).json({ error: "AI check failed" }); }
 });
 

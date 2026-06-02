@@ -665,6 +665,7 @@ function setupNavButtons() {
       else if (view === "mytrees") openMyTrees();
       else if (view === "leaderboard") openLeaderboard();
       else if (view === "profile") { updateProfilePanel(); openPanel("profilePanel"); }
+      else if (view === "ai") openAiCheckerPanel();
       else if (view === "contact") openPanel("contactPanel");
     });
   });
@@ -672,7 +673,7 @@ function setupNavButtons() {
 
 // ==================== PANELS ====================
 function setupPanelCloses() {
-  [["closeReport","reportPanel"],["closeTree","treePanel"],["closeProfile","profilePanel"],["closeLeaderboard","leaderboardPanel"],["closeMyTrees","myTreesPanel"],["closeContact","contactPanel"],["closeAdmin","adminPanel"],["closeUpdates","updatesPanel"],["closeUserProfile","userProfilePanel"]].forEach(([btnId, panelId]) => {
+  [["closeReport","reportPanel"],["closeTree","treePanel"],["closeProfile","profilePanel"],["closeLeaderboard","leaderboardPanel"],["closeMyTrees","myTreesPanel"],["closeContact","contactPanel"],["closeAdmin","adminPanel"],["closeUpdates","updatesPanel"],["closeUserProfile","userProfilePanel"],["closeAiChecker","aiCheckerPanel"]].forEach(([btnId, panelId]) => {
     document.getElementById(btnId).addEventListener("click", () => closePanel(panelId));
   });
   document.getElementById("overlay").addEventListener("click", closeAllPanels);
@@ -990,6 +991,45 @@ document.getElementById("aiCheckBtn").addEventListener("click", async () => {
   } catch (err) {
     resultDiv.className = "ai-result grade-ok";
     resultDiv.innerHTML = `<div class="ai-result-header">⚠️ Check unavailable</div><p>Could not analyse the photo right now. You can still submit the tree!</p>`;
+  }
+});
+
+// ==================== STANDALONE AI CHECKER ====================
+function openAiCheckerPanel() {
+  document.getElementById("aiCheckerPhoto").value = "";
+  document.getElementById("aiCheckerRunBtn").style.display = "none";
+  const result = document.getElementById("aiCheckerResult");
+  result.className = "ai-result hidden";
+  result.innerHTML = "";
+  openPanel("aiCheckerPanel");
+}
+window.openAiCheckerPanel = openAiCheckerPanel;
+
+document.getElementById("aiCheckerPhoto").addEventListener("change", (e) => {
+  document.getElementById("aiCheckerRunBtn").style.display = e.target.files[0] ? "block" : "none";
+  const result = document.getElementById("aiCheckerResult");
+  result.className = "ai-result hidden";
+  result.innerHTML = "";
+});
+
+document.getElementById("aiCheckerRunBtn").addEventListener("click", async () => {
+  const file = document.getElementById("aiCheckerPhoto").files[0];
+  if (!file) return;
+  const resultDiv = document.getElementById("aiCheckerResult");
+  resultDiv.className = "ai-loading"; resultDiv.classList.remove("hidden");
+  resultDiv.innerHTML = `<div class="ai-spinner"></div> Analysing fruit quality...`;
+  try {
+    const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(",")[1]); reader.onerror = reject; reader.readAsDataURL(file); });
+    const mediaType = file.type || "image/jpeg";
+    const response = await fetch("/api/ai-check", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ imageBase64: base64, mediaType }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error);
+    const safeGrade = ["good","ok","bad"].includes(result.grade) ? result.grade : "ok";
+    resultDiv.className = `ai-result grade-${safeGrade}`;
+    resultDiv.innerHTML = `<div class="ai-result-header">${esc(result.emoji)} ${esc(result.headline)}</div><p>${esc(result.summary)}</p><p style="margin-top:8px;opacity:0.8">💡 ${esc(result.tips)}</p>`;
+  } catch (err) {
+    resultDiv.className = "ai-result grade-ok";
+    resultDiv.innerHTML = `<div class="ai-result-header">⚠️ Check unavailable</div><p>Could not analyse the photo right now. Try again in a moment!</p>`;
   }
 });
 

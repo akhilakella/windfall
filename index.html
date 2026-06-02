@@ -160,6 +160,7 @@
     <button class="nav-btn" data-view="mytrees"><span class="nav-icon">🌳</span><span class="nav-label">My Trees</span></button>
     <button class="nav-btn" data-view="leaderboard"><span class="nav-icon">🏆</span><span class="nav-label">Rankings</span></button>
     <button class="nav-btn" data-view="profile"><span class="nav-icon">👤</span><span class="nav-label">Profile</span></button>
+    <button class="nav-btn" data-view="ai"><span class="nav-icon">🤖</span><span class="nav-label">AI Check</span></button>
     <button class="nav-btn" data-view="contact"><span class="nav-icon">📬</span><span class="nav-label">Contact</span></button>
   </nav>
 </div>
@@ -341,6 +342,24 @@
 <div id="userProfilePanel" class="panel">
   <div class="panel-header"><h2>👤 Profile</h2><button class="panel-close" id="closeUserProfile">✕</button></div>
   <div class="panel-body" id="userProfileBody"></div>
+</div>
+
+<!-- AI Fruit Checker Panel -->
+<div id="aiCheckerPanel" class="panel">
+  <div class="panel-header"><h2>🤖 AI Fruit Checker</h2><button class="panel-close" id="closeAiChecker">✕</button></div>
+  <div class="panel-body">
+    <p class="panel-hint">Take or upload a photo of fruit to instantly check its quality with AI.</p>
+    <div class="field-group"><label>Photo</label><input type="file" id="aiCheckerPhoto" accept="image/*" capture="environment" /></div>
+    <button id="aiCheckerRunBtn" class="btn-secondary" style="display:none;">🤖 Check Fruit Quality</button>
+    <div id="aiCheckerResult" class="ai-result hidden"></div>
+    <div style="margin-top:16px;padding:14px;background:rgba(74,124,63,0.1);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.82rem;color:var(--text-sub);line-height:1.7;">
+      <strong style="color:var(--text-main);">How it works</strong><br/>
+      The AI looks at your photo and grades the fruit:<br/>
+      🍎 <strong>Good</strong> — fresh &amp; ripe, great for people<br/>
+      ⚠️ <strong>OK</strong> — slightly damaged, fine for animals or cider<br/>
+      🚫 <strong>Bad</strong> — rotten or mouldy, best left behind
+    </div>
+  </div>
 </div>
 
 <div id="overlay" class="overlay hidden"></div>
