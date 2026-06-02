@@ -36,6 +36,10 @@
       <div class="field-group"><label>Password</label><input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" /></div>
       <div id="loginError" class="auth-error hidden"></div>
       <button id="loginBtn" class="btn-primary">Sign In</button>
+      <div id="loginLoader" class="liquid-loader" style="display:none;">
+        <div class="loading-text">Signing in<span class="loader-dot">.</span><span class="loader-dot">.</span><span class="loader-dot">.</span></div>
+        <div class="loader-track"><div class="liquid-fill"></div></div>
+      </div>
       <button id="forgotPassBtn" style="background:none;border:none;color:var(--text-sub);font-size:0.82rem;cursor:pointer;margin-top:4px;text-decoration:underline;">Forgot password?</button>
     </div>
     <div id="registerForm" class="auth-form">

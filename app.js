@@ -120,6 +120,8 @@ async function doLogin() {
   err.classList.add("hidden");
   if (!email || !pass) { showErr(err, "Please fill in all fields."); return; }
   setLoading("loginBtn", true, "Sign In");
+  document.getElementById("loginBtn").style.display = "none";
+  document.getElementById("loginLoader").style.display = "flex";
   try {
     const res = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pass }) });
     const data = await res.json();
@@ -133,7 +135,11 @@ async function doLogin() {
     localStorage.setItem("wf_token", token);
     showApp();
   } catch { showErr(err, "Network error. Please try again."); }
-  finally { setLoading("loginBtn", false, "Sign In"); }
+  finally {
+    setLoading("loginBtn", false, "Sign In");
+    document.getElementById("loginBtn").style.display = "";
+    document.getElementById("loginLoader").style.display = "none";
+  }
 }
 
 async function doRegister() {
