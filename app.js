@@ -29,6 +29,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupFilters();
   checkResetToken();
 
+  document.getElementById("maintenanceRefreshBtn").addEventListener("click", async () => {
+    showToast("Checking...");
+    const stillBlocked = await checkMaintenanceMode();
+    if (!stillBlocked && token && currentUser) showApp();
+    else if (!stillBlocked) { document.getElementById("maintenanceScreen").classList.remove("active"); document.getElementById("authScreen").classList.add("active"); }
+  });
+
   // Public map route — show read-only map without login
   if (window.location.pathname === "/map" && !token) {
     const params = new URLSearchParams(window.location.search);
@@ -251,12 +258,9 @@ function showResetMsg(text, success) {
 }
 
 // ==================== APP INIT ====================
+let maintenancePollStarted = false;
+
 async function showApp() {
-  document.getElementById("authScreen").classList.remove("active");
-  document.getElementById("appScreen").classList.add("active");
-  initMap();
-  loadTrees();
-  updateProfilePanel();
   try {
     const res = await apiFetch("/api/admin/check");
     const data = await res.json();
@@ -274,6 +278,42 @@ async function showApp() {
       });
     }
   } catch {}
+
+  // Non-admins get bounced to the maintenance screen if it's switched on
+  const blocked = await checkMaintenanceMode();
+  if (blocked) return;
+
+  document.getElementById("authScreen").classList.remove("active");
+  document.getElementById("maintenanceScreen").classList.remove("active");
+  document.getElementById("appScreen").classList.add("active");
+  initMap();
+  loadTrees();
+  updateProfilePanel();
+
+  if (!maintenancePollStarted) {
+    maintenancePollStarted = true;
+    setInterval(checkMaintenanceMode, 60000);
+  }
+}
+
+// Returns true if the current (non-admin) user has been shown the maintenance screen
+async function checkMaintenanceMode() {
+  try {
+    const res = await fetch("/api/maintenance");
+    const data = await res.json();
+    const screen = document.getElementById("maintenanceScreen");
+    if (data.enabled && !isAdmin) {
+      document.getElementById("maintenanceMsg").textContent = (data.message && data.message.trim()) || "We're making some improvements to Windfall right now. Hang tight — we'll be back shortly!";
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      screen.classList.add("active");
+      return true;
+    }
+    if (screen.classList.contains("active")) {
+      screen.classList.remove("active");
+      document.getElementById("appScreen").classList.add("active");
+    }
+    return false;
+  } catch { return false; }
 }
 
 // ==================== MAP ====================
@@ -703,6 +743,7 @@ function setupAdminTabs() {
       if (name === "analytics") loadAdminAnalytics();
       if (name === "trees") loadAdminTrees();
       if (name === "announce") loadAdminAnnouncements();
+      if (name === "maintenance") loadMaintenanceStatus();
       if (name === "danger") loadAdminUsers();
     });
   });
@@ -730,6 +771,45 @@ function setupAdminTabs() {
       } else showToast("Failed to post update");
     } catch { showToast("Error posting update"); }
   });
+
+  document.getElementById("toggleMaintenanceBtn").addEventListener("click", async () => {
+    const btn = document.getElementById("toggleMaintenanceBtn");
+    const enabling = btn.dataset.enabled !== "1";
+    const message = document.getElementById("maintenanceMessageInput").value.trim();
+    if (enabling && !confirm("Turn maintenance mode ON? Other users will see a 'we're working on it' screen instead of the app. You'll still have full access to everything.")) return;
+    try {
+      const res = await apiFetch("/api/admin/maintenance", { method: "POST", body: JSON.stringify({ enabled: enabling, message }) });
+      if (res.ok) {
+        showToast(enabling ? "🚧 Maintenance mode is ON" : "✅ Maintenance mode is OFF");
+        loadMaintenanceStatus();
+      } else showToast("Failed to update maintenance mode");
+    } catch { showToast("Error updating maintenance mode"); }
+  });
+}
+
+async function loadMaintenanceStatus() {
+  try {
+    const res = await apiFetch("/api/maintenance");
+    const data = await res.json();
+    const statusText = document.getElementById("maintenanceStatusText");
+    const btn = document.getElementById("toggleMaintenanceBtn");
+    const box = document.getElementById("maintenanceStatusBox");
+    document.getElementById("maintenanceMessageInput").value = data.message || "";
+    if (data.enabled) {
+      statusText.textContent = "🔴 ON — visitors see the maintenance screen, you still have full access";
+      box.style.background = "rgba(192,57,43,0.1)";
+      box.style.border = "1px solid rgba(192,57,43,0.3)";
+      btn.textContent = "✅ Turn Maintenance Mode Off";
+      btn.className = "btn-secondary";
+    } else {
+      statusText.textContent = "🟢 OFF — everyone can use the app as normal";
+      box.style.background = "rgba(76,175,80,0.1)";
+      box.style.border = "1px solid rgba(76,175,80,0.3)";
+      btn.textContent = "🚧 Turn Maintenance Mode On";
+      btn.className = "btn-primary";
+    }
+    btn.dataset.enabled = data.enabled ? "1" : "0";
+  } catch { showToast("Could not load maintenance status"); }
 }
 
 async function loadAdminRequests() {

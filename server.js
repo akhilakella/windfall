@@ -391,6 +391,27 @@ app.delete("/api/admin/announcements/:id", authMiddleware, adminMiddleware, asyn
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
+// ---- MAINTENANCE MODE ----
+const MAINTENANCE_KEY = "maintenance:status";
+
+// Public — anyone (even logged out) can check whether the app is in maintenance mode
+app.get("/api/maintenance", async (req, res) => {
+  try {
+    const raw = await redis.get(MAINTENANCE_KEY);
+    res.json(raw ? JSON.parse(raw) : { enabled: false, message: "" });
+  } catch { res.json({ enabled: false, message: "" }); }
+});
+
+// Admin only — toggle maintenance mode on/off, with an optional custom message
+app.post("/api/admin/maintenance", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { enabled, message } = req.body;
+    const status = { enabled: !!enabled, message: (message || "").toString().trim().slice(0, 300), updatedAt: Date.now() };
+    await redis.set(MAINTENANCE_KEY, JSON.stringify(status));
+    res.json(status);
+  } catch (err) { res.status(500).json({ error: "Server error" }); }
+});
+
 // ---- LEADERBOARD ----
 app.get("/api/leaderboard", async (req, res) => {
   try {
