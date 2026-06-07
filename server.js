@@ -447,9 +447,10 @@ app.post("/api/ai-check", authMiddleware, async (req, res) => {
     }
     const prompt = `You are a fruit quality checker for a community apple rescue app in Rugby, UK. Analyse this photo and respond ONLY in this exact JSON format (no markdown, no extra text):\n{"grade":"good","emoji":"🍎","headline":"one short headline","summary":"2-3 sentences about quality and suitability for animals or humans","tips":"one practical tip"}\nUse grade: good=fresh/ripe/suitable, ok=slightly damaged but usable for animals/cider, bad=rotten/mouldy/unsafe. Use emoji 🍎 for good, ⚠️ for ok, 🚫 for bad.`;
     const models = [
-      process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free",
-      "google/gemini-flash-1.5-8b:free",
-      "meta-llama/llama-3.2-11b-vision-instruct:free"
+      process.env.OPENROUTER_MODEL || "google/gemma-4-31b-it:free",
+      "nvidia/nemotron-nano-12b-v2-vl:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "moonshotai/kimi-k2.6:free"
     ];
     let lastError = "AI check failed";
     for (const model of models) {
