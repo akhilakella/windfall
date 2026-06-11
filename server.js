@@ -5,7 +5,6 @@ const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 const Redis = require("ioredis");
 
 const app = express();
@@ -26,14 +25,10 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.static(path.join(__dirname)));
 
-const uploadsDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => cb(null, uuidv4() + path.extname(file.originalname)),
-});
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+// Photos are stored as base64 data URLs inside the tree record in Redis —
+// Render's disk is ephemeral, so files written to it vanish on every deploy.
+// The frontend compresses photos before upload so these stay small (~100-200KB).
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.split(" ")[1];
@@ -167,7 +162,7 @@ app.post("/api/trees", authMiddleware, upload.single("photo"), async (req, res) 
     const { lat, lng, type, landType, notes, estimatedKg, address } = req.body;
     if (!lat || !lng || !type) return res.status(400).json({ error: "lat, lng and type required" });
     const id = uuidv4();
-    const tree = { id, lat: parseFloat(lat), lng: parseFloat(lng), type, landType: landType || "unknown", notes: notes || "", address: address || "", estimatedKg: parseFloat(estimatedKg) || 0, status: "active", photo: req.file ? `/uploads/${req.file.filename}` : null, reportedBy: req.user.id, reportedByName: req.user.name, reportedAt: Date.now(), pickups: [] };
+    const tree = { id, lat: parseFloat(lat), lng: parseFloat(lng), type, landType: landType || "unknown", notes: notes || "", address: address || "", estimatedKg: parseFloat(estimatedKg) || 0, status: "active", photo: req.file ? `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}` : null, reportedBy: req.user.id, reportedByName: req.user.name, reportedAt: Date.now(), pickups: [] };
     await redis.set(`tree:${id}`, JSON.stringify(tree));
     const user = JSON.parse(await redis.get(`user:${req.user.id}`));
     user.treesReported = (user.treesReported || 0) + 1;

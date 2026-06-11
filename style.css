@@ -319,6 +319,8 @@ option { background: var(--green-dark); }
 }
 .nav-btn {
   flex: 1;
+  min-width: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -329,8 +331,18 @@ option { background: var(--green-dark); }
   cursor: pointer;
   transition: all 0.2s;
 }
+.nav-btn.active::before {
+  content: "";
+  position: absolute;
+  top: -6px; left: 50%;
+  transform: translateX(-50%);
+  width: 26px; height: 3px;
+  border-radius: 0 0 4px 4px;
+  background: linear-gradient(90deg, var(--green-light), var(--gold));
+  box-shadow: 0 0 8px rgba(125,184,116,0.6);
+}
 .nav-icon { font-size: 1.3rem; transition: transform 0.2s; }
-.nav-label { font-size: 0.68rem; color: var(--text-muted); font-weight: 500; }
+.nav-label { font-size: 0.68rem; color: var(--text-muted); font-weight: 500; white-space: nowrap; overflow: hidden; max-width: 100%; }
 .nav-btn.active .nav-label { color: var(--green-light); }
 .nav-btn.active .nav-icon { transform: scale(1.15); }
 

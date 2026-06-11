@@ -387,6 +387,30 @@ function setupFAB() {
   document.getElementById("submitTreeBtn").addEventListener("click", submitTree);
 }
 
+// Phone cameras produce 5-12MB images; shrink to ~100-200KB before upload so
+// they fit comfortably in Redis and the AI checker's request body limit.
+function compressImage(file, maxDim = 1024, quality = 0.72) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      canvas.toBlob(b => resolve(b || file), "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 async function submitTree() {
   const lat = document.getElementById("pinLat").value;
   const lng = document.getElementById("pinLng").value;
@@ -403,8 +427,8 @@ async function submitTree() {
   fd.append("lat", lat); fd.append("lng", lng); fd.append("type", type);
   fd.append("landType", landType); fd.append("notes", notes);
   fd.append("estimatedKg", estKg || 0); fd.append("address", address || "");
-  if (photoFile) fd.append("photo", photoFile);
   setLoading("submitTreeBtn", true, "Drop Pin 📍");
+  if (photoFile) fd.append("photo", await compressImage(photoFile), "photo.jpg");
   try {
     const res = await fetch("/api/trees", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
     const tree = await res.json();
@@ -414,6 +438,9 @@ async function submitTree() {
     if (tempMarker) { map.removeLayer(tempMarker); tempMarker = null; }
     ["pinLat","pinLng","treeNotes","estKg","pinAddress"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("treePhoto").value = "";
+    document.getElementById("aiCheckBtn").style.display = "none";
+    const aiResult = document.getElementById("aiResult");
+    aiResult.className = "ai-result hidden"; aiResult.innerHTML = "";
     closePanel("reportPanel");
     showToast(`${getFruitEmoji(tree.type)} Tree pinned! Thanks for rescuing fruit! 🌿`);
     currentUser.treesReported = (currentUser.treesReported || 0) + 1;
@@ -432,7 +459,7 @@ function openTreePanel(treeId) {
   const pickupList = (tree.pickups || []).map(p => `<div class="pickup-row"><span>${esc(p.byName)}</span><span>${esc(p.kg)}kg · ${timeSince(p.at)}</span></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet — be the first!</p>";
   const commentList = (tree.comments || []).map(c => `<div class="comment-row"><span class="comment-name" style="cursor:pointer" onclick="openUserProfile('${esc(c.userId)}')">${esc(c.userName)}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${esc(c.text)}</p></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No comments yet — leave a note!</p>";
   document.getElementById("treePanelBody").innerHTML = `
-    ${tree.photo ? `<img src="${esc(tree.photo)}" class="tree-detail-photo" alt="Tree photo" />` : ""}
+    ${tree.photo ? `<img src="${esc(tree.photo)}" class="tree-detail-photo" alt="Tree photo" onerror="this.remove()" />` : ""}
     <div class="tree-meta">
       <span class="tree-chip">${emoji} ${esc(capitalise(tree.type))}</span>
       <span class="tree-chip">📍 ${esc(capitalise(tree.landType))}</span>
@@ -478,6 +505,7 @@ async function logPickup(treeId) {
   try {
     const res = await apiFetch(`/api/trees/${treeId}/pickup`, { method: "PATCH", body: JSON.stringify({ kg }) });
     const updated = await res.json();
+    if (!res.ok) { showToast(updated.error || "Failed to log pickup"); return; }
     const idx = allTrees.findIndex(t => t.id === treeId);
     if (idx !== -1) allTrees[idx] = updated;
     addTreeMarker(updated);
@@ -522,7 +550,7 @@ async function addComment(treeId) {
     const listEl = document.getElementById(`commentList-${treeId}`);
     if (listEl) {
       const comments = allTrees[treeIdx]?.comments || [];
-      listEl.innerHTML = comments.map(c => `<div class="comment-row"><span class="comment-name">${esc(c.userName)}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${esc(c.text)}</p></div>`).join("");
+      listEl.innerHTML = comments.map(c => `<div class="comment-row"><span class="comment-name" style="cursor:pointer" onclick="openUserProfile('${esc(c.userId)}')">${esc(c.userName)}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${esc(c.text)}</p></div>`).join("");
     }
     showToast("Comment posted! 💬");
   } catch { showToast("Failed to post comment"); }
@@ -531,7 +559,7 @@ window.addComment = addComment;
 
 // ==================== PROFILE ====================
 function setupProfileBtn() {
-  document.getElementById("profileBtn").addEventListener("click", () => openPanel("profilePanel"));
+  document.getElementById("profileBtn").addEventListener("click", () => { updateProfilePanel(); openPanel("profilePanel"); });
   document.getElementById("changePassBtn").addEventListener("click", async () => {
     const newPass = document.getElementById("newPass").value;
     const confirmPass = document.getElementById("confirmNewPass").value;
@@ -563,7 +591,7 @@ function updateProfilePanel() {
   document.getElementById("profileName").textContent = currentUser.name || "";
   document.getElementById("profileEmail").textContent = currentUser.email || "";
   document.getElementById("statKg").textContent = (currentUser.kgRescued || 0).toFixed(1);
-  document.getElementById("statTrees").textContent = allTrees.filter(t => t.reportedBy === currentUser.id).length;
+  document.getElementById("statTrees").textContent = Math.max(allTrees.filter(t => t.reportedBy === currentUser.id).length, currentUser.treesReported || 0);
   document.getElementById("statPickups").textContent = currentUser.pickups || 0;
   const badgeMap = {
     "developer": ["⚙️", "Developer"],
@@ -596,13 +624,6 @@ async function openLeaderboard() {
       <div style="background:rgba(74,124,63,0.15);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center;margin-bottom:8px;">
         <div style="font-family:'Fraunces',serif;font-size:2rem;font-weight:900;color:var(--green-light);">${(totalKg||0).toFixed(1)}kg</div>
         <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">total fruit rescued by Warwickshire community 🍎</div>
-      </div>
-      <div style="background:rgba(212,168,67,0.1);border:1px solid rgba(212,168,67,0.3);border-radius:var(--radius-sm);padding:14px;text-align:center;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:14px;">
-        <div style="font-size:2rem;">🍎</div>
-        <div>
-          <div style="font-family:'Fraunces',serif;font-size:1.6rem;font-weight:900;color:var(--gold);line-height:1;">100kg</div>
-          <div style="font-size:0.78rem;color:var(--text-sub);margin-top:2px;">apples collected across Warwickshire in 2025</div>
-        </div>
       </div>
       ${users.length === 0
         ? `<p style="color:var(--text-muted);text-align:center">No rescuers yet — be first! 🍎</p>`
@@ -1066,8 +1087,9 @@ document.getElementById("aiCheckBtn").addEventListener("click", async () => {
   resultDiv.className = "ai-loading"; resultDiv.classList.remove("hidden");
   resultDiv.innerHTML = `<div class="ai-spinner"></div> Analysing fruit quality...`;
   try {
-    const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(",")[1]); reader.onerror = reject; reader.readAsDataURL(file); });
-    const mediaType = file.type || "image/jpeg";
+    const compressed = await compressImage(file);
+    const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(",")[1]); reader.onerror = reject; reader.readAsDataURL(compressed); });
+    const mediaType = compressed.type || "image/jpeg";
     const response = await fetch("/api/ai-check", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ imageBase64: base64, mediaType }) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
@@ -1105,8 +1127,9 @@ document.getElementById("aiCheckerRunBtn").addEventListener("click", async () =>
   resultDiv.className = "ai-loading"; resultDiv.classList.remove("hidden");
   resultDiv.innerHTML = `<div class="ai-spinner"></div> Analysing fruit quality...`;
   try {
-    const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(",")[1]); reader.onerror = reject; reader.readAsDataURL(file); });
-    const mediaType = file.type || "image/jpeg";
+    const compressed = await compressImage(file);
+    const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(",")[1]); reader.onerror = reject; reader.readAsDataURL(compressed); });
+    const mediaType = compressed.type || "image/jpeg";
     const response = await fetch("/api/ai-check", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ imageBase64: base64, mediaType }) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
