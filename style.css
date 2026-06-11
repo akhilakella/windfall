@@ -594,7 +594,8 @@ option { background: var(--green-dark); }
   flex-direction: column;
   gap: 10px;
 }
-.tree-pickup-form input {
+.tree-pickup-form input,
+.tree-pickup-form select {
   background: rgba(255,255,255,0.06);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -604,7 +605,10 @@ option { background: var(--green-dark); }
   font-size: 0.95rem;
   outline: none;
 }
-.tree-pickup-form input:focus { border-color: var(--green-light); }
+.tree-pickup-form select { cursor: pointer; }
+.tree-pickup-form select option { background: var(--panel-bg); color: var(--text-main); }
+.tree-pickup-form input:focus,
+.tree-pickup-form select:focus { border-color: var(--green-light); }
 .pickup-history { display: flex; flex-direction: column; gap: 6px; }
 .pickup-row {
   font-size: 0.82rem;

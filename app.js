@@ -14,6 +14,32 @@ let publicMap = null;
 let heatLayer = null;
 let heatmapActive = false;
 let lastAnalytics = null;
+let userPos = null;
+let lastLeaderboardUsers = null;
+let pendingTreeId = null;
+
+// ==================== DISTANCE ====================
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function distanceLabel(tree) {
+  if (!userPos) return "";
+  const km = distanceKm(userPos.lat, userPos.lng, tree.lat, tree.lng);
+  return km < 1 ? `${Math.round(km * 1000)}m away` : `${km.toFixed(1)}km away`;
+}
+
+function captureUserPos() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    p => { userPos = { lat: p.coords.latitude, lng: p.coords.longitude }; },
+    () => {},
+    { maximumAge: 300000, timeout: 10000 }
+  );
+}
 
 // ==================== INIT ====================
 document.addEventListener("DOMContentLoaded", async () => {
@@ -29,12 +55,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupFilters();
   checkResetToken();
 
+  document.getElementById("leaderboardSearch").addEventListener("input", (e) => renderLeaderboard(e.target.value.trim()));
+  document.getElementById("myTreesSearch").addEventListener("input", renderMyTrees);
+  document.getElementById("myTreesSort").addEventListener("change", renderMyTrees);
+
   document.getElementById("maintenanceRefreshBtn").addEventListener("click", async () => {
     showToast("Checking...");
     const stillBlocked = await checkMaintenanceMode();
     if (!stillBlocked && token && currentUser) showApp();
     else if (!stillBlocked) { document.getElementById("maintenanceScreen").classList.remove("active"); document.getElementById("authScreen").classList.add("active"); }
   });
+
+  // Shared tree link — remember it, open after login + map load
+  const treeMatch = window.location.pathname.match(/^\/tree\/([a-zA-Z0-9-]+)/);
+  if (treeMatch) { pendingTreeId = treeMatch[1]; window.history.replaceState({}, "", "/"); }
 
   // Public map route — show read-only map without login
   if (window.location.pathname === "/map" && !token) {
@@ -289,6 +323,7 @@ async function showApp() {
   initMap();
   loadTrees();
   updateProfilePanel();
+  captureUserPos();
 
   if (!maintenancePollStarted) {
     maintenancePollStarted = true;
@@ -346,7 +381,11 @@ function addTreeMarker(tree) {
   const icon = L.divIcon({ className: "temp-pin", html: `<div style="position:relative;display:inline-block;"><div style="width:36px;height:36px;border-radius:50%;background:${color}22;border:2.5px solid ${color};box-shadow:0 0 10px ${color}88;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;">${emoji}</div>${verifiedBadge}</div>`, iconAnchor: [18,18], popupAnchor: [0,-20] });
   const marker = L.marker([tree.lat, tree.lng], { icon });
   const kgText = tree.estimatedKg > 0 ? `~${tree.estimatedKg}kg` : "";
-  marker.bindPopup(`<div class="popup-title">${emoji} ${esc(capitalise(tree.type))} Tree</div><div class="popup-sub">${kgText ? esc(kgText) + " · " : ""}${esc(capitalise(tree.landType))} · by ${esc(tree.reportedByName)}</div><button class="popup-btn" onclick="openTreePanel('${esc(tree.id)}')">View Details</button>`);
+  // Popup content is a function so the distance reflects the user's position at open time
+  marker.bindPopup(() => {
+    const dist = distanceLabel(tree);
+    return `<div class="popup-title">${emoji} ${esc(capitalise(tree.type))} Tree</div><div class="popup-sub">${kgText ? esc(kgText) + " · " : ""}${esc(capitalise(tree.landType))} · by ${esc(tree.reportedByName)}${dist ? `<br/>📏 ${dist}` : ""}</div><button class="popup-btn" onclick="openTreePanel('${esc(tree.id)}')">View Details</button>`;
+  });
   markers[tree.id] = marker;
   const typeOk = activeTypeFilter === "all" || tree.type === activeTypeFilter;
   const statusOk = activeStatusFilter === "all" || tree.status === activeStatusFilter;
@@ -358,6 +397,12 @@ async function loadTrees() {
     const res = await fetch("/api/trees");
     allTrees = await res.json();
     allTrees.forEach(t => addTreeMarker(t));
+    if (pendingTreeId) {
+      const id = pendingTreeId; pendingTreeId = null;
+      const tree = allTrees.find(t => t.id === id);
+      if (tree) { map.setView([tree.lat, tree.lng], 16); openTreePanel(id); }
+      else showToast("That tree is no longer on the map 🍂");
+    }
   } catch { console.error("Could not load trees"); }
 }
 
@@ -456,7 +501,7 @@ function openTreePanel(treeId) {
   map.closePopup();
   const emoji = getFruitEmoji(tree.type);
   document.getElementById("treePanelTitle").textContent = `${emoji} ${capitalise(tree.type)} Tree`;
-  const pickupList = (tree.pickups || []).map(p => `<div class="pickup-row"><span>${esc(p.byName)}</span><span>${esc(p.kg)}kg · ${timeSince(p.at)}</span></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet — be the first!</p>";
+  const pickupList = (tree.pickups || []).map(p => { const d = DEST_META[p.destination]; return `<div class="pickup-row"><span>${esc(p.byName)}</span><span>${d ? d[0] + " " : ""}${esc(p.kg)}kg · ${timeSince(p.at)}</span></div>`; }).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet — be the first!</p>";
   const commentList = (tree.comments || []).map(c => `<div class="comment-row"><span class="comment-name" style="cursor:pointer" onclick="openUserProfile('${esc(c.userId)}')">${esc(c.userName)}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${esc(c.text)}</p></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No comments yet — leave a note!</p>";
   document.getElementById("treePanelBody").innerHTML = `
     ${tree.photo ? `<img src="${esc(tree.photo)}" class="tree-detail-photo" alt="Tree photo" onerror="this.remove()" />` : ""}
@@ -465,11 +510,15 @@ function openTreePanel(treeId) {
       <span class="tree-chip">📍 ${esc(capitalise(tree.landType))}</span>
       ${tree.estimatedKg > 0 ? `<span class="tree-chip">~${esc(tree.estimatedKg)}kg</span>` : ""}
       <span class="tree-status-chip status-${esc(tree.status)}">${esc(capitalise(tree.status))}</span>
+      ${distanceLabel(tree) ? `<span class="tree-chip">📏 ${distanceLabel(tree)}</span>` : ""}
       ${tree.verified ? '<span class="tree-chip" style="background:rgba(76,175,80,0.15);color:#81c784;border-color:rgba(76,175,80,0.35);">✅ Verified</span>' : ""}
     </div>
     ${tree.notes ? `<p class="tree-notes">"${esc(tree.notes)}"</p>` : ""}
     <div style="font-size:0.8rem;color:var(--text-muted)">Reported by ${esc(tree.reportedByName)} · ${timeSince(tree.reportedAt)}${tree.address ? `<br/>📍 ${esc(tree.address)}` : ""}</div>
-    <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(tree.lat)},${encodeURIComponent(tree.lng)}" target="_blank" rel="noopener" class="btn-secondary" style="text-align:center;text-decoration:none;display:block;padding:10px 14px;font-size:0.9rem;">🗺️ Get Directions</a>
+    <div style="display:flex;gap:10px;">
+      <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(tree.lat)},${encodeURIComponent(tree.lng)}" target="_blank" rel="noopener" class="btn-secondary" style="flex:1;text-align:center;text-decoration:none;display:block;padding:10px 14px;font-size:0.9rem;">🗺️ Directions</a>
+      <button class="btn-secondary" style="flex:1;padding:10px 14px;font-size:0.9rem;" onclick="shareTree('${esc(tree.id)}')">📤 Share Tree</button>
+    </div>
     <div>
       <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin-bottom:8px;">Update Status</h3>
       <div class="status-btn-row">
@@ -481,6 +530,13 @@ function openTreePanel(treeId) {
     <div class="tree-pickup-form">
       <h3 style="font-family:'Fraunces',serif;font-size:1rem;color:var(--text-sub)">Log a Pickup</h3>
       <input type="number" id="pickupKg" placeholder="How many kg did you rescue?" min="0" step="0.5" />
+      <select id="pickupDest">
+        <option value="eaten">🍎 Eaten fresh</option>
+        <option value="animals">🐾 Animal feed / sanctuary</option>
+        <option value="juice">🍾 Juice or cider</option>
+        <option value="baking">🥧 Baking &amp; cooking</option>
+        <option value="donated">🤝 Donated / shared</option>
+      </select>
       <button class="btn-primary btn-sm" onclick="logPickup('${tree.id}')">✅ Log Pickup</button>
     </div>
     <div>
@@ -499,11 +555,33 @@ function openTreePanel(treeId) {
 }
 window.openTreePanel = openTreePanel;
 
+async function shareTree(treeId) {
+  const tree = allTrees.find(t => t.id === treeId);
+  const url = `${location.origin}/tree/${treeId}`;
+  const title = tree ? `${getFruitEmoji(tree.type)} ${capitalise(tree.type)} tree on Windfall` : "A fruit tree on Windfall";
+  if (navigator.share) {
+    try { await navigator.share({ title, text: `${title} — come help rescue the fruit! 🌿`, url }); return; }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  try { await navigator.clipboard.writeText(url); showToast("🔗 Link copied — send it to a friend!"); }
+  catch { prompt("Copy this link:", url); }
+}
+window.shareTree = shareTree;
+
+const DEST_META = {
+  eaten:   ["🍎", "Eaten fresh"],
+  animals: ["🐾", "Animal feed"],
+  juice:   ["🍾", "Juice & cider"],
+  baking:  ["🥧", "Baking"],
+  donated: ["🤝", "Donated"]
+};
+
 async function logPickup(treeId) {
   const kg = parseFloat(document.getElementById("pickupKg").value) || 0;
   if (kg <= 0) { showToast("Enter how many kg you rescued!"); return; }
+  const destination = document.getElementById("pickupDest")?.value || "eaten";
   try {
-    const res = await apiFetch(`/api/trees/${treeId}/pickup`, { method: "PATCH", body: JSON.stringify({ kg }) });
+    const res = await apiFetch(`/api/trees/${treeId}/pickup`, { method: "PATCH", body: JSON.stringify({ kg, destination }) });
     const updated = await res.json();
     if (!res.ok) { showToast(updated.error || "Failed to log pickup"); return; }
     const idx = allTrees.findIndex(t => t.id === treeId);
@@ -618,37 +696,73 @@ async function openLeaderboard() {
   try {
     const res = await fetch("/api/leaderboard");
     const data = await res.json();
-    const { users, totalKg } = data;
-    const medals = ["gold","silver","bronze"];
-    document.getElementById("leaderboardList").innerHTML = `
-      <div style="background:rgba(74,124,63,0.15);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center;margin-bottom:8px;">
-        <div style="font-family:'Fraunces',serif;font-size:2rem;font-weight:900;color:var(--green-light);">${(totalKg||0).toFixed(1)}kg</div>
-        <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">total fruit rescued by Warwickshire community 🍎</div>
-      </div>
-      ${users.length === 0
-        ? `<p style="color:var(--text-muted);text-align:center">No rescuers yet — be first! 🍎</p>`
-        : users.map((u, i) => `
-          <div class="leader-row">
-            <div class="leader-rank ${medals[i]||""}">${i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div>
-            <div class="leader-info">
-              <div class="leader-name" style="cursor:pointer" onclick="openUserProfile('${esc(u.id)}')">${esc(u.name)} ${u.email === "akhilakella@outlook.com" ? '<span style="font-size:0.7rem;background:rgba(212,168,67,0.2);color:var(--gold);border:1px solid rgba(212,168,67,0.4);border-radius:100px;padding:2px 8px;margin-left:4px;">👑 Dev</span>' : ""}</div>
-              <div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div>
-            </div>
-            <div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div>
-          </div>`).join("")}`;
+    lastLeaderboardUsers = { users: data.users, totalKg: data.totalKg };
+    document.getElementById("leaderboardSearch").value = "";
+    renderLeaderboard("");
     openPanel("leaderboardPanel");
   } catch { showToast("Could not load rankings"); }
 }
 
+function renderLeaderboard(filter) {
+  if (!lastLeaderboardUsers) return;
+  const { users, totalKg } = lastLeaderboardUsers;
+  const medals = ["gold","silver","bronze"];
+  const q = (filter || "").toLowerCase();
+  // Keep original ranks (and medals) even when the list is filtered
+  const visible = users.map((u, i) => ({ u, i })).filter(({ u }) => !q || u.name.toLowerCase().includes(q));
+
+  // Community impact: where the rescued fruit actually went
+  const destTotals = {};
+  allTrees.forEach(t => (t.pickups || []).forEach(p => {
+    const d = p.destination || "eaten";
+    destTotals[d] = (destTotals[d] || 0) + (p.kg || 0);
+  }));
+  const destChips = Object.entries(destTotals)
+    .filter(([, kg]) => kg > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([d, kg]) => { const [icon, label] = DEST_META[d] || ["🍏", d]; return `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(74,124,63,0.18);border:1px solid var(--border);border-radius:100px;padding:4px 10px;font-size:0.75rem;color:var(--text-sub);">${icon} ${label}: <strong style="color:var(--green-light);">${kg.toFixed(1)}kg</strong></span>`; })
+    .join(" ");
+
+  document.getElementById("leaderboardList").innerHTML = `
+    <div style="background:rgba(74,124,63,0.15);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center;margin-bottom:8px;">
+      <div style="font-family:'Fraunces',serif;font-size:2rem;font-weight:900;color:var(--green-light);">${(totalKg||0).toFixed(1)}kg</div>
+      <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">total fruit rescued by Warwickshire community 🍎</div>
+      ${destChips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:12px;">${destChips}</div>` : ""}
+    </div>
+    ${visible.length === 0
+      ? `<p style="color:var(--text-muted);text-align:center">${q ? "No rescuers match that search 🔍" : "No rescuers yet — be first! 🍎"}</p>`
+      : visible.map(({ u, i }) => `
+        <div class="leader-row">
+          <div class="leader-rank ${medals[i]||""}">${i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div>
+          <div class="leader-info">
+            <div class="leader-name" style="cursor:pointer" onclick="openUserProfile('${esc(u.id)}')">${esc(u.name)} ${u.email === "akhilakella@outlook.com" ? '<span style="font-size:0.7rem;background:rgba(212,168,67,0.2);color:var(--gold);border:1px solid rgba(212,168,67,0.4);border-radius:100px;padding:2px 8px;margin-left:4px;">👑 Dev</span>' : ""}</div>
+            <div class="leader-sub">${u.treesReported} trees · ${u.pickups} pickups</div>
+          </div>
+          <div class="leader-kg">${u.kgRescued.toFixed(1)}kg</div>
+        </div>`).join("")}`;
+}
+
 // ==================== MY TREES ====================
 function openMyTrees() {
-  const mine = allTrees.filter(t => t.reportedBy === currentUser.id);
-  document.getElementById("myTreesList").innerHTML = mine.length === 0
-    ? `<p style="color:var(--text-muted);text-align:center">You haven't reported any trees yet!<br><br>Tap the ＋ button to get started. 🌱</p>`
-    : mine.map(t => `<div class="my-tree-card" onclick="openTreePanel('${esc(t.id)}');closePanel('myTreesPanel')"><div class="my-tree-header"><span class="my-tree-type">${getFruitEmoji(t.type)} ${esc(capitalise(t.type))} Tree</span><span class="my-tree-date">${timeSince(t.reportedAt)}</span></div><div class="my-tree-notes">${t.notes ? esc(t.notes) : "No notes"}</div></div>`).join("");
+  document.getElementById("myTreesSearch").value = "";
+  renderMyTrees();
   openPanel("myTreesPanel");
 }
 window.openMyTrees = openMyTrees;
+
+function renderMyTrees() {
+  const q = document.getElementById("myTreesSearch").value.trim().toLowerCase();
+  const sort = document.getElementById("myTreesSort").value;
+  let mine = allTrees.filter(t => t.reportedBy === currentUser.id);
+  if (q) mine = mine.filter(t => [t.type, t.notes, t.address, t.status].some(f => (f || "").toLowerCase().includes(q)));
+  if (sort === "newest") mine.sort((a, b) => b.reportedAt - a.reportedAt);
+  else if (sort === "oldest") mine.sort((a, b) => a.reportedAt - b.reportedAt);
+  else if (sort === "type") mine.sort((a, b) => a.type.localeCompare(b.type));
+  else if (sort === "nearest" && userPos) mine.sort((a, b) => distanceKm(userPos.lat, userPos.lng, a.lat, a.lng) - distanceKm(userPos.lat, userPos.lng, b.lat, b.lng));
+  document.getElementById("myTreesList").innerHTML = mine.length === 0
+    ? `<p style="color:var(--text-muted);text-align:center">${q ? "No trees match that search 🔍" : "You haven't reported any trees yet!<br><br>Tap the ＋ button to get started. 🌱"}</p>`
+    : mine.map(t => { const dist = distanceLabel(t); return `<div class="my-tree-card" onclick="openTreePanel('${esc(t.id)}');closePanel('myTreesPanel')"><div class="my-tree-header"><span class="my-tree-type">${getFruitEmoji(t.type)} ${esc(capitalise(t.type))} Tree</span><span class="my-tree-date">${timeSince(t.reportedAt)}</span></div><div class="my-tree-notes">${t.notes ? esc(t.notes) : "No notes"}${dist ? ` · 📏 ${dist}` : ""}</div></div>`; }).join("");
+}
 
 // ==================== FILTERS ====================
 function setupFilters() {

@@ -178,7 +178,9 @@ app.patch("/api/trees/:id/pickup", authMiddleware, async (req, res) => {
     if (!raw) return res.status(404).json({ error: "Tree not found" });
     const tree = JSON.parse(raw);
     const kgNum = parseFloat(req.body.kg) || 0;
-    tree.pickups.push({ by: req.user.id, byName: req.user.name, kg: kgNum, at: Date.now() });
+    const validDests = ["eaten", "animals", "juice", "baking", "donated"];
+    const destination = validDests.includes(req.body.destination) ? req.body.destination : "eaten";
+    tree.pickups.push({ by: req.user.id, byName: req.user.name, kg: kgNum, destination, at: Date.now() });
     tree.status = "picked";
     await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
     const user = JSON.parse(await redis.get(`user:${req.user.id}`));
