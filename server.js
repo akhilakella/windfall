@@ -42,6 +42,24 @@ function adminMiddleware(req, res, next) {
   next();
 }
 
+// Escape user-supplied text before embedding it in email HTML
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Send an email via Resend. Returns silently if no API key is configured.
+async function sendEmail({ to, subject, html }) {
+  if (!process.env.RESEND_API_KEY) { console.error("RESEND_API_KEY not set — email skipped"); return; }
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.RESEND_API_KEY}` },
+      body: JSON.stringify({ from: process.env.EMAIL_FROM || "Windfall <onboarding@resend.dev>", to, subject, html })
+    });
+    if (!r.ok) console.error("Email send failed:", await r.text());
+  } catch (e) { console.error("Email send error:", e.message); }
+}
+
 // ---- REGISTER ----
 app.post("/api/register", async (req, res) => {
   try {
@@ -59,6 +77,13 @@ app.post("/api/register", async (req, res) => {
       const token = jwt.sign({ id, name, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
       return res.json({ token, user: { id, name, email: user.email, kgRescued: 0, treesReported: 0, pickups: 0, badges: [] } });
     }
+    // Notify the admin so they don't have to keep checking the app manually
+    const appUrl = process.env.APP_URL || "https://windfall-jvc3.onrender.com";
+    sendEmail({
+      to: ADMIN_EMAIL,
+      subject: `🌱 New Windfall sign-up: ${name}`,
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0f1a0e;color:#e8f0e6;border-radius:16px;"><h1 style="color:#d4a843;">🍎 Windfall</h1><p>Someone new wants to join Windfall:</p><div style="background:rgba(74,124,63,0.15);border:1px solid rgba(74,124,63,0.4);border-radius:10px;padding:16px;margin:16px 0;"><p style="margin:0 0 6px;"><strong>Name:</strong> ${esc(name)}</p><p style="margin:0;"><strong>Email:</strong> ${esc(email.toLowerCase())}</p></div><p>Open the app and head to <strong>Admin → Requests</strong> to approve or reject them.</p><a href="${appUrl}" style="display:inline-block;background:#4a7c3f;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;">Review Request</a></div>`
+    });
     res.json({ pending: true, message: "Your account is awaiting approval. You will be able to log in once the admin approves your request." });
   } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
 });
@@ -113,15 +138,11 @@ app.post("/api/forgot-password", async (req, res) => {
     const resetToken = uuidv4();
     await redis.set(`reset:${resetToken}`, userId, "EX", 3600);
     const resetUrl = `${process.env.APP_URL || "https://windfall-jvc3.onrender.com"}/reset-password?token=${resetToken}`;
-    try {
-      if (process.env.RESEND_API_KEY) {
-        await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.RESEND_API_KEY}` },
-          body: JSON.stringify({ from: "Windfall <onboarding@resend.dev>", to: email.toLowerCase(), subject: "Reset your Windfall password", html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0f1a0e;color:#e8f0e6;border-radius:16px;"><h1>🍎 Windfall</h1><p>Click below to reset your password. Expires in 1 hour.</p><a href="${resetUrl}" style="display:inline-block;background:#4a7c3f;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;">Reset Password</a></div>` })
-        });
-      }
-    } catch (e) { console.error("Email send failed:", e); }
+    await sendEmail({
+      to: email.toLowerCase(),
+      subject: "Reset your Windfall password",
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0f1a0e;color:#e8f0e6;border-radius:16px;"><h1>🍎 Windfall</h1><p>Click below to reset your password. Expires in 1 hour.</p><a href="${resetUrl}" style="display:inline-block;background:#4a7c3f;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;">Reset Password</a></div>`
+    });
     res.json({ success: true });
   } catch (err) { console.error(err); res.json({ success: true }); }
 });
