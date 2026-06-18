@@ -1061,3 +1061,38 @@ option { background: var(--green-dark); }
   from { transform: translate(-50%, -50%) rotate(0deg); }
   to   { transform: translate(-50%, -50%) rotate(360deg); }
 }
+
+/* ==================== CONFIRM DIALOG ==================== */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: wfFadeIn 0.15s ease;
+}
+.confirm-box {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+  max-width: 340px;
+  width: 100%;
+}
+.confirm-msg {
+  font-size: 0.95rem;
+  color: var(--text-main);
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+}
+.confirm-actions button { flex: 1; }
+@keyframes wfFadeIn { from { opacity: 0; } to { opacity: 1; } }

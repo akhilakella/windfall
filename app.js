@@ -889,7 +889,7 @@ function setupAdminTabs() {
   });
 
   document.getElementById("resetStatsBtn").addEventListener("click", async () => {
-    if (!confirm("Reset ALL users stats? Cannot be undone!")) return;
+    if (!await confirmDialog("Reset ALL users' stats back to zero? This cannot be undone.", { confirmText: "Reset All" })) return;
     try {
       const res = await apiFetch("/api/admin/reset-stats", { method: "POST" });
       if (res.ok) { showToast("✅ All stats reset!"); currentUser.kgRescued = 0; currentUser.pickups = 0; currentUser.treesReported = 0; currentUser.badges = []; updateProfilePanel(); }
@@ -916,7 +916,7 @@ function setupAdminTabs() {
     const btn = document.getElementById("toggleMaintenanceBtn");
     const enabling = btn.dataset.enabled !== "1";
     const message = document.getElementById("maintenanceMessageInput").value.trim();
-    if (enabling && !confirm("Turn maintenance mode ON? Other users will see a 'we're working on it' screen instead of the app. You'll still have full access to everything.")) return;
+    if (enabling && !await confirmDialog("Turn maintenance mode ON? Other users will see a 'we're working on it' screen instead of the app. You'll still have full access to everything.", { confirmText: "Turn On", danger: false })) return;
     try {
       const res = await apiFetch("/api/admin/maintenance", { method: "POST", body: JSON.stringify({ enabled: enabling, message }) });
       if (res.ok) {
@@ -1001,7 +1001,7 @@ async function approveUser(userId) {
 window.approveUser = approveUser;
 
 async function rejectUser(userId, userName) {
-  if (!confirm(`Reject and delete "${userName}"?`)) return;
+  if (!await confirmDialog(`Reject and delete "${userName}"?`, { confirmText: "Reject" })) return;
   try {
     const res = await apiFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
     if (res.ok) { showToast(`🗑 ${userName} rejected`); loadAdminRequests(); refreshAdminBadge(); }
@@ -1111,11 +1111,11 @@ async function loadAdminUsers() {
 }
 
 async function deleteUser(userId, userName) {
-  if (!confirm(`Delete user "${userName}"? Cannot be undone!`)) return;
+  if (!await confirmDialog(`Delete user "${userName}"? This cannot be undone.`, { confirmText: "Delete" })) return;
   try {
     const res = await apiFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
     if (res.ok) { showToast(`🗑 ${userName} deleted`); loadAdminUsers(); }
-    else showToast("Failed to delete user");
+    else { const d = await res.json().catch(() => ({})); showToast(d.error || `Failed to delete (${res.status})`); }
   } catch { showToast("Error deleting user"); }
 }
 window.deleteUser = deleteUser;
@@ -1444,6 +1444,31 @@ window.downloadYearCard = downloadYearCard;
 // ==================== HELPERS ====================
 async function apiFetch(url, opts = {}) {
   return fetch(url, { ...opts, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(opts.headers || {}) }, body: opts.body });
+}
+
+// In-app confirmation dialog — replaces native confirm(), which browsers can
+// silently suppress ("don't allow more dialogs") and which misbehaves in PWAs.
+function confirmDialog(message, { confirmText = "Confirm", danger = true } = {}) {
+  return new Promise(resolve => {
+    const overlay = document.createElement("div");
+    overlay.className = "confirm-overlay";
+    overlay.innerHTML = `
+      <div class="confirm-box">
+        <p class="confirm-msg">${esc(message)}</p>
+        <div class="confirm-actions">
+          <button class="btn-secondary btn-sm" data-act="cancel">Cancel</button>
+          <button class="${danger ? "btn-danger" : "btn-primary"} btn-sm" data-act="ok">${esc(confirmText)}</button>
+        </div>
+      </div>`;
+    const done = (val) => { overlay.remove(); resolve(val); };
+    overlay.addEventListener("click", e => {
+      if (e.target === overlay) done(false);
+      const act = e.target.closest("[data-act]")?.dataset.act;
+      if (act === "ok") done(true);
+      if (act === "cancel") done(false);
+    });
+    document.body.appendChild(overlay);
+  });
 }
 
 function val(id) { return document.getElementById(id).value.trim(); }
