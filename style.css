@@ -341,7 +341,24 @@ option { background: var(--green-dark); }
   background: linear-gradient(90deg, var(--green-light), var(--gold));
   box-shadow: 0 0 8px rgba(125,184,116,0.6);
 }
-.nav-icon { font-size: 1.3rem; transition: transform 0.2s; }
+.nav-icon { font-size: 1.3rem; transition: transform 0.2s; position: relative; }
+.nav-badge {
+  position: absolute;
+  top: -4px; right: -10px;
+  min-width: 16px; height: 16px;
+  padding: 0 4px;
+  border-radius: 100px;
+  background: var(--apple-warm);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--panel-bg);
+  box-shadow: 0 0 6px rgba(231,76,60,0.7);
+}
 .nav-label { font-size: 0.68rem; color: var(--text-muted); font-weight: 500; white-space: nowrap; overflow: hidden; max-width: 100%; }
 .nav-btn.active .nav-label { color: var(--green-light); }
 .nav-btn.active .nav-icon { transform: scale(1.15); }

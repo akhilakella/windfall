@@ -303,13 +303,18 @@ async function showApp() {
       const nav = document.querySelector(".bottom-nav");
       const btn = document.createElement("button");
       btn.className = "nav-btn"; btn.dataset.view = "admin";
-      btn.innerHTML = `<span class="nav-icon">🔧</span><span class="nav-label">Admin</span>`;
+      btn.innerHTML = `<span class="nav-icon">🔧<span id="adminBadge" class="nav-badge" style="display:none;">0</span></span><span class="nav-label">Admin</span>`;
       nav.appendChild(btn);
       btn.addEventListener("click", () => {
         document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
         openAdminPanel();
       });
+    }
+    if (isAdmin) {
+      refreshAdminBadge();
+      // Re-check periodically so the badge appears even if you leave the app open
+      setInterval(refreshAdminBadge, 120000);
     }
   } catch {}
 
@@ -947,10 +952,29 @@ async function loadMaintenanceStatus() {
   } catch { showToast("Could not load maintenance status"); }
 }
 
+// Updates the red count badge on the Admin nav tab — visual backup in case an email is missed
+async function refreshAdminBadge() {
+  if (!isAdmin) return;
+  try {
+    const res = await apiFetch("/api/admin/requests");
+    if (!res.ok) return;
+    const data = await res.json();
+    setAdminBadge(data.length);
+  } catch {}
+}
+
+function setAdminBadge(count) {
+  const badge = document.getElementById("adminBadge");
+  if (!badge) return;
+  if (count > 0) { badge.textContent = count > 9 ? "9+" : count; badge.style.display = "flex"; }
+  else { badge.style.display = "none"; }
+}
+
 async function loadAdminRequests() {
   try {
     const res = await apiFetch("/api/admin/requests");
     const data = await res.json();
+    setAdminBadge(data.length);
     document.getElementById("adminRequestsList").innerHTML = data.length === 0
       ? `<p style="color:var(--text-muted);font-size:0.85rem;text-align:center;">No pending requests 🎉</p>`
       : data.map(u => `
@@ -970,7 +994,7 @@ async function loadAdminRequests() {
 async function approveUser(userId) {
   try {
     const res = await apiFetch(`/api/admin/approve/${userId}`, { method: "POST" });
-    if (res.ok) { showToast("✅ User approved!"); loadAdminRequests(); }
+    if (res.ok) { showToast("✅ User approved!"); loadAdminRequests(); refreshAdminBadge(); }
     else showToast("Failed to approve user");
   } catch { showToast("Error approving user"); }
 }
@@ -980,7 +1004,7 @@ async function rejectUser(userId, userName) {
   if (!confirm(`Reject and delete "${userName}"?`)) return;
   try {
     const res = await apiFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
-    if (res.ok) { showToast(`🗑 ${userName} rejected`); loadAdminRequests(); }
+    if (res.ok) { showToast(`🗑 ${userName} rejected`); loadAdminRequests(); refreshAdminBadge(); }
     else showToast("Failed to reject user");
   } catch { showToast("Error rejecting user"); }
 }
