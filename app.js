@@ -1111,12 +1111,14 @@ async function loadAdminUsers() {
 }
 
 async function deleteUser(userId, userName) {
+  console.log("deleteUser called with id:", JSON.stringify(userId), "name:", userName);
+  if (!userId) { showToast("⚠️ This user has no ID — can't delete (data issue)"); return; }
   if (!await confirmDialog(`Delete user "${userName}"? This cannot be undone.`, { confirmText: "Delete" })) return;
   try {
-    const res = await apiFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
-    if (res.ok) { showToast(`🗑 ${userName} deleted`); loadAdminUsers(); }
-    else { const d = await res.json().catch(() => ({})); showToast(d.error || `Failed to delete (${res.status})`); }
-  } catch { showToast("Error deleting user"); }
+    const res = await apiFetch(`/api/admin/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
+    if (res.ok) { showToast(`🗑 ${userName} deleted`); loadAdminUsers(); refreshAdminBadge(); }
+    else { const d = await res.json().catch(() => ({})); console.error("Delete failed", res.status, d); showToast(d.error || `Failed to delete (${res.status})`); }
+  } catch (e) { console.error("Delete threw", e); showToast("Error deleting user"); }
 }
 window.deleteUser = deleteUser;
 

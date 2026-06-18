@@ -262,7 +262,7 @@ app.get("/api/admin/requests", authMiddleware, adminMiddleware, async (req, res)
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       const u = JSON.parse(await redis.get(key));
-      if (u && u.status === "pending") pending.push({ id: u.id, name: u.name, email: u.email, joinedAt: u.joinedAt });
+      if (u && u.status === "pending") pending.push({ id: u.id || parts[1], name: u.name, email: u.email, joinedAt: u.joinedAt });
     }
     pending.sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0));
     res.json(pending);
@@ -281,12 +281,17 @@ app.post("/api/admin/approve/:id", authMiddleware, adminMiddleware, async (req, 
 
 app.delete("/api/admin/users/:id", authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const user = JSON.parse(await redis.get(`user:${req.params.id}`));
-    if (!user) return res.status(404).json({ error: "User not found" });
-    await redis.del(`user:${user.id}`);
-    await redis.del(`user:email:${user.email}`);
+    const id = req.params.id;
+    console.log("Delete user request for id:", id);
+    const raw = await redis.get(`user:${id}`);
+    if (!raw) { console.error("Delete: no user record at key user:" + id); return res.status(404).json({ error: "User not found" }); }
+    const user = JSON.parse(raw);
+    // Always delete by the key we were given, even if the record's own id field is stale/missing
+    await redis.del(`user:${id}`);
+    if (user.email) await redis.del(`user:email:${user.email.toLowerCase()}`);
+    console.log("Deleted user:", user.email || id);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: "Server error" }); }
+  } catch (err) { console.error("Delete user error:", err); res.status(500).json({ error: "Server error" }); }
 });
 
 app.get("/api/admin/users", authMiddleware, adminMiddleware, async (req, res) => {
@@ -298,7 +303,8 @@ app.get("/api/admin/users", authMiddleware, adminMiddleware, async (req, res) =>
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       const u = JSON.parse(await redis.get(key));
-      if (u && u.name && u.status !== "pending" && u.status !== "rejected") users.push({ id: u.id, name: u.name, email: u.email, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, joinedAt: u.joinedAt });
+      // Fall back to the id embedded in the key so old records without an id field are still deletable
+      if (u && u.name && u.status !== "pending" && u.status !== "rejected") users.push({ id: u.id || parts[1], name: u.name, email: u.email, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, joinedAt: u.joinedAt });
     }
     users.sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0));
     res.json(users);
