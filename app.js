@@ -970,10 +970,14 @@ function setAdminBadge(count) {
   else { badge.style.display = "none"; }
 }
 
+let adminRequestsCache = [];
+let adminUsersCache = [];
+
 async function loadAdminRequests() {
   try {
     const res = await apiFetch("/api/admin/requests");
     const data = await res.json();
+    adminRequestsCache = data;
     setAdminBadge(data.length);
     document.getElementById("adminRequestsList").innerHTML = data.length === 0
       ? `<p style="color:var(--text-muted);font-size:0.85rem;text-align:center;">No pending requests 🎉</p>`
@@ -985,7 +989,7 @@ async function loadAdminRequests() {
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;">
               <button onclick="approveUser('${esc(u.id)}')" style="background:rgba(76,175,80,0.2);border:1px solid rgba(76,175,80,0.4);color:#81c784;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✅ Approve</button>
-              <button onclick="rejectUser('${esc(u.id)}', ${JSON.stringify(esc(u.name))})" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✕ Reject</button>
+              <button onclick="rejectUser('${esc(u.id)}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">✕ Reject</button>
             </div>
           </div>`).join("");
   } catch { showToast("Could not load requests"); }
@@ -1000,7 +1004,8 @@ async function approveUser(userId) {
 }
 window.approveUser = approveUser;
 
-async function rejectUser(userId, userName) {
+async function rejectUser(userId) {
+  const userName = adminRequestsCache.find(u => u.id === userId)?.name || "this user";
   if (!await confirmDialog(`Reject and delete "${userName}"?`, { confirmText: "Reject" })) return;
   try {
     const res = await apiFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
@@ -1097,6 +1102,7 @@ async function loadAdminUsers() {
   try {
     const res = await apiFetch("/api/admin/users");
     const users = await res.json();
+    adminUsersCache = users;
     document.getElementById("adminUsersList").innerHTML = users.length === 0
       ? `<p style="color:var(--text-muted);font-size:0.85rem">No approved users yet</p>`
       : users.map(u => `
@@ -1105,12 +1111,13 @@ async function loadAdminUsers() {
               <div class="my-tree-type" style="font-size:0.9rem;">${esc(u.name)}</div>
               <div class="my-tree-notes">${esc(u.email)} · ${u.kgRescued.toFixed(1)}kg · ${u.treesReported} trees</div>
             </div>
-            ${u.email !== "akhilakella@outlook.com" ? `<button onclick="deleteUser('${esc(u.id)}', ${JSON.stringify(esc(u.name))})" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;flex-shrink:0;margin-left:10px;">🗑</button>` : `<span style="font-size:0.75rem;color:var(--gold);flex-shrink:0;">👑 Admin</span>`}
+            ${u.email !== "akhilakella@outlook.com" ? `<button onclick="deleteUser('${esc(u.id)}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;flex-shrink:0;margin-left:10px;">🗑</button>` : `<span style="font-size:0.75rem;color:var(--gold);flex-shrink:0;">👑 Admin</span>`}
           </div>`).join("");
   } catch { showToast("Could not load users"); }
 }
 
-async function deleteUser(userId, userName) {
+async function deleteUser(userId) {
+  const userName = adminUsersCache.find(u => u.id === userId)?.name || "this user";
   console.log("deleteUser called with id:", JSON.stringify(userId), "name:", userName);
   if (!userId) { showToast("⚠️ This user has no ID — can't delete (data issue)"); return; }
   if (!await confirmDialog(`Delete user "${userName}"? This cannot be undone.`, { confirmText: "Delete" })) return;
