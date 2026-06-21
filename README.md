@@ -2,7 +2,7 @@
 
 > Warwickshire's community apple rescue map. Spot a tree. Pin it. Save the fruit.
 
-Built by **Akhil Akella**, age 13, House Leader, Warwickshire Youth Council member, BBC CWR Young Hero Award winner.
+Built by **Akhil Akella**, age 13, Warwickshire Youth Council member, BBC CWR Young Hero Award winner.
 
 ---
 
