@@ -10,6 +10,7 @@ let tempMarker = null;
 let allTrees = [];
 let activeTypeFilter = "all";
 let activeStatusFilter = "all";
+let activeDistFilter = null; // miles; null = any distance
 let publicMap = null;
 let heatLayer = null;
 let heatmapActive = false;
@@ -35,8 +36,11 @@ function distanceLabel(tree) {
 function captureUserPos() {
   if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(
-    p => { userPos = { lat: p.coords.latitude, lng: p.coords.longitude }; },
-    () => {},
+    p => {
+      userPos = { lat: p.coords.latitude, lng: p.coords.longitude };
+      if (activeDistFilter) applyFilters(); // distance filter was waiting on this
+    },
+    () => { if (activeDistFilter) showToast("Couldn't get your location — showing all trees"); },
     { maximumAge: 300000, timeout: 10000 }
   );
 }
@@ -428,7 +432,8 @@ function addTreeMarker(tree) {
   markers[tree.id] = marker;
   const typeOk = activeTypeFilter === "all" || tree.type === activeTypeFilter;
   const statusOk = activeStatusFilter === "all" || tree.status === activeStatusFilter;
-  if (typeOk && statusOk) marker.addTo(map);
+  const distOk = !activeDistFilter || !userPos || distanceKm(userPos.lat, userPos.lng, tree.lat, tree.lng) <= activeDistFilter * 1.60934;
+  if (typeOk && statusOk && distOk) marker.addTo(map);
 }
 
 async function loadTrees() {
@@ -823,6 +828,36 @@ function setupFilters() {
       applyFilters();
     });
   });
+
+  const customInput = document.getElementById("customDistInput");
+  document.querySelectorAll(".filter-pill[data-filter-dist]").forEach(pill => {
+    pill.addEventListener("click", () => {
+      document.querySelectorAll(".filter-pill[data-filter-dist]").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      const val = pill.dataset.filterDist;
+      if (val === "all") {
+        activeDistFilter = null;
+        customInput.style.display = "none";
+      } else if (val === "custom") {
+        customInput.style.display = "block";
+        customInput.focus();
+        activeDistFilter = parseFloat(customInput.value) || null;
+      } else {
+        customInput.style.display = "none";
+        activeDistFilter = parseFloat(val);
+      }
+      if (activeDistFilter && !userPos) {
+        showToast("📍 Finding your location...");
+        captureUserPos();
+      }
+      applyFilters();
+    });
+  });
+  customInput.addEventListener("input", () => {
+    activeDistFilter = parseFloat(customInput.value) || null;
+    if (activeDistFilter && !userPos) captureUserPos();
+    applyFilters();
+  });
 }
 
 function applyFilters() {
@@ -832,7 +867,10 @@ function applyFilters() {
     if (!marker) return;
     const typeOk = activeTypeFilter === "all" || tree.type === activeTypeFilter;
     const statusOk = activeStatusFilter === "all" || tree.status === activeStatusFilter;
-    if (typeOk && statusOk) { if (!map.hasLayer(marker)) marker.addTo(map); }
+    // Distance filter (miles → km). If we don't have the user's position yet,
+    // show everything rather than an empty map; it re-applies once located.
+    const distOk = !activeDistFilter || !userPos || distanceKm(userPos.lat, userPos.lng, tree.lat, tree.lng) <= activeDistFilter * 1.60934;
+    if (typeOk && statusOk && distOk) { if (!map.hasLayer(marker)) marker.addTo(map); }
     else { if (map.hasLayer(marker)) map.removeLayer(marker); }
   });
 }

@@ -176,6 +176,13 @@
       <button class="filter-pill" data-filter-status="active">🌿 Ready</button>
       <button class="filter-pill" data-filter-status="picked">✅ Picked</button>
       <button class="filter-pill" data-filter-status="rotten">🍂 Rotten</button>
+      <div class="filter-sep"></div>
+      <button class="filter-pill active" data-filter-dist="all">Any distance</button>
+      <button class="filter-pill" data-filter-dist="1">📍 1 mi</button>
+      <button class="filter-pill" data-filter-dist="5">📍 5 mi</button>
+      <button class="filter-pill" data-filter-dist="10">📍 10 mi</button>
+      <button class="filter-pill" data-filter-dist="custom">✏️ Custom</button>
+      <input type="number" id="customDistInput" min="0.1" step="0.5" placeholder="mi" style="display:none;width:70px;flex-shrink:0;background:rgba(255,255,255,0.08);border:1px solid var(--gold);border-radius:100px;padding:5px 12px;font-size:0.78rem;color:var(--text-main);outline:none;font-family:'DM Sans',sans-serif;" />
     </div>
   </div>
   <button id="addTreeBtn" class="fab" title="Report a tree">＋</button>

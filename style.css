@@ -230,6 +230,8 @@ option { background: var(--green-dark); }
 /* ==================== MAP ==================== */
 #appScreen { flex-direction: column; }
 #map { flex: 1; width: 100%; z-index: 1; }
+/* Keep Leaflet's zoom buttons clear of the bottom nav + FAB */
+#map .leaflet-bottom.leaflet-right { bottom: 76px; right: 74px; }
 
 /* ==================== TOP BAR ==================== */
 .top-bar {
@@ -362,7 +364,8 @@ option { background: var(--green-dark); }
   background: rgba(15,26,14,0.96);
   backdrop-filter: blur(12px);
   border-top: 1px solid var(--border);
-  padding: 6px 0 env(safe-area-inset-bottom, 6px);
+  /* always keep at least 8px under the labels; add the phone safe-area on top */
+  padding: 6px 0 calc(env(safe-area-inset-bottom, 0px) + 8px);
 }
 .nav-btn {
   flex: 1;
@@ -406,7 +409,7 @@ option { background: var(--green-dark); }
   border: 1.5px solid var(--panel-bg);
   box-shadow: 0 0 6px rgba(231,76,60,0.7);
 }
-.nav-label { font-size: 0.68rem; color: var(--text-muted); font-weight: 500; white-space: nowrap; overflow: hidden; max-width: 100%; }
+.nav-label { font-size: 0.68rem; line-height: 1.25; color: var(--text-muted); font-weight: 500; white-space: nowrap; overflow: hidden; max-width: 100%; }
 .nav-btn.active .nav-label { color: var(--green-light); }
 .nav-btn.active .nav-icon { transform: scale(1.15); }
 
