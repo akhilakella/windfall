@@ -61,6 +61,36 @@ function inSeason(type) {
   return m >= s.from && m <= s.to;
 }
 
+function openSeasonsPanel() {
+  const monthNames = ["J","F","M","A","M","J","J","A","S","O","N","D"];
+  const nowM = new Date().getMonth() + 1;
+  const fruits = [
+    { type: "cherry", emoji: "🍒", name: "Cherry" },
+    { type: "plum",   emoji: "🟣", name: "Plum" },
+    { type: "apple",  emoji: "🍎", name: "Apple" },
+    { type: "pear",   emoji: "🍐", name: "Pear" }
+  ];
+  document.getElementById("seasonsList").innerHTML = fruits.map(f => {
+    const s = FRUIT_SEASONS[f.type];
+    const now = inSeason(f.type);
+    const cells = monthNames.map((mn, i) => {
+      const m = i + 1;
+      const inWin = m >= s.from && m <= s.to;
+      const isNow = m === nowM;
+      return `<div class="season-cell${inWin ? " season-on" : ""}${isNow ? " season-now" : ""}" title="${mn}">${mn}</div>`;
+    }).join("");
+    return `
+      <div class="my-tree-card" style="cursor:default;">
+        <div class="my-tree-header" style="margin-bottom:8px;">
+          <span class="my-tree-type">${f.emoji} ${f.name}</span>
+          <span style="font-size:0.75rem;${now ? "color:var(--gold);font-weight:700;" : "color:var(--text-muted);"}">${now ? "🌟 In season now!" : s.label}</span>
+        </div>
+        <div class="season-strip">${cells}</div>
+      </div>`;
+  }).join("") + `<p style="font-size:0.78rem;color:var(--text-muted);text-align:center;">🌳 "Other" fruit varies — check the tree's notes.</p>`;
+  openPanel("seasonsPanel");
+}
+
 function updateSeasonHint() {
   const el = document.getElementById("seasonHint");
   const type = document.getElementById("treeType").value;
@@ -89,6 +119,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("myTreesSearch").addEventListener("input", renderMyTrees);
   document.getElementById("myTreesSort").addEventListener("change", renderMyTrees);
   document.getElementById("notifsBtn").addEventListener("click", openNotifsPanel);
+  document.getElementById("seasonsBtn").addEventListener("click", openSeasonsPanel);
   document.getElementById("treeType").addEventListener("change", updateSeasonHint);
   loadCommunityImpact();
 
@@ -933,7 +964,7 @@ function setupNavButtons() {
 
 // ==================== PANELS ====================
 function setupPanelCloses() {
-  [["closeReport","reportPanel"],["closeTree","treePanel"],["closeProfile","profilePanel"],["closeLeaderboard","leaderboardPanel"],["closeMyTrees","myTreesPanel"],["closeContact","contactPanel"],["closeAdmin","adminPanel"],["closeUpdates","updatesPanel"],["closeUserProfile","userProfilePanel"],["closeAiChecker","aiCheckerPanel"],["closeNotifs","notifsPanel"]].forEach(([btnId, panelId]) => {
+  [["closeReport","reportPanel"],["closeTree","treePanel"],["closeProfile","profilePanel"],["closeLeaderboard","leaderboardPanel"],["closeMyTrees","myTreesPanel"],["closeContact","contactPanel"],["closeAdmin","adminPanel"],["closeUpdates","updatesPanel"],["closeUserProfile","userProfilePanel"],["closeAiChecker","aiCheckerPanel"],["closeNotifs","notifsPanel"],["closeSeasons","seasonsPanel"]].forEach(([btnId, panelId]) => {
     document.getElementById(btnId).addEventListener("click", () => closePanel(panelId));
   });
   document.getElementById("overlay").addEventListener("click", closeAllPanels);

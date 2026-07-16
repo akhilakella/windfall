@@ -315,6 +315,36 @@ option { background: var(--green-dark); }
 /* Unread notification highlight */
 .notif-unread { border-left: 3px solid var(--gold); }
 
+/* Harvest calendar month strips */
+.season-strip {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 3px;
+}
+.season-cell {
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 0;
+}
+.season-cell.season-on {
+  background: rgba(74,124,63,0.4);
+  color: var(--green-pale);
+}
+.season-cell.season-now {
+  border-color: var(--gold);
+  box-shadow: 0 0 6px rgba(212,168,67,0.5);
+  color: var(--gold);
+}
+.season-cell.season-on.season-now {
+  background: rgba(212,168,67,0.3);
+  font-weight: 800;
+}
+
 /* ==================== LEGEND ==================== */
 .legend {
   position: fixed;
