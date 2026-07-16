@@ -47,6 +47,42 @@ function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// Branded welcome email sent when the admin approves a new member.
+// The logo is the hosted PNG (email clients block SVGs; PNGs are safe).
+function welcomeEmailHtml(name, appUrl) {
+  const firstName = esc((name || "").split(" ")[0] || "there");
+  return `
+  <div style="margin:0;padding:0;background:#0f1a0e;">
+    <div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:40px 32px;background:#111d10;border-radius:18px;color:#e8f0e6;text-align:center;">
+      <img src="${appUrl}/icon-192.png" alt="Windfall" width="88" height="88" style="width:88px;height:88px;object-fit:contain;margin-bottom:12px;" />
+      <div style="font-size:1.9rem;font-weight:800;letter-spacing:6px;color:#e8f0e6;margin-bottom:4px;">WINDFALL</div>
+      <div style="height:3px;width:60px;background:linear-gradient(90deg,#7db874,#d4a843);margin:14px auto 24px;border-radius:2px;"></div>
+
+      <h1 style="font-size:1.35rem;color:#d4a843;margin:0 0 16px;">Welcome aboard, ${firstName}! 🎉</h1>
+
+      <p style="font-size:0.98rem;line-height:1.65;color:#c9d8c4;margin:0 0 16px;">
+        Your account has been approved — you're officially part of the Windfall community.
+      </p>
+      <p style="font-size:0.98rem;line-height:1.65;color:#c9d8c4;margin:0 0 16px;">
+        Every apple you map and every kilo you rescue is fruit that would've gone to waste — now it feeds people and animals across Warwickshire instead. Small actions, real impact. 🌿
+      </p>
+      <p style="font-size:1.05rem;line-height:1.6;color:#7db874;font-weight:700;margin:0 0 28px;">
+        Let's do this together. 💪
+      </p>
+
+      <a href="${appUrl}" style="display:inline-block;background:#4a7c3f;color:#ffffff;padding:15px 40px;border-radius:12px;text-decoration:none;font-weight:700;font-size:1rem;box-shadow:0 6px 18px rgba(74,124,63,0.4);">
+        🍎 Open Windfall
+      </a>
+
+      <p style="font-size:0.8rem;color:#556b52;margin:32px 0 0;line-height:1.6;">
+        Ready to start? Sign in, drop your first pin on the map, and help rescue the harvest.<br/>
+        Questions? Just reply to <a href="mailto:akhilakella@outlook.com" style="color:#7db874;">akhilakella@outlook.com</a>.
+      </p>
+    </div>
+    <div style="text-align:center;font-size:0.72rem;color:#3a4a37;padding:16px;">Windfall · Community apple rescue · Warwickshire, UK</div>
+  </div>`;
+}
+
 // Send an email via Resend. Returns silently if no API key is configured.
 async function sendEmail({ to, subject, html }) {
   if (!process.env.RESEND_API_KEY) { console.error("RESEND_API_KEY not set — email skipped"); return; }
@@ -271,12 +307,24 @@ app.get("/api/admin/requests", authMiddleware, adminMiddleware, async (req, res)
 
 app.post("/api/admin/approve/:id", authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const user = JSON.parse(await redis.get(`user:${req.params.id}`));
-    if (!user) return res.status(404).json({ error: "User not found" });
+    const raw = await redis.get(`user:${req.params.id}`);
+    if (!raw) return res.status(404).json({ error: "User not found" });
+    const user = JSON.parse(raw);
+    const wasPending = user.status === "pending";
     user.status = "approved";
-    await redis.set(`user:${user.id}`, JSON.stringify(user));
+    await redis.set(`user:${req.params.id}`, JSON.stringify(user));
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: "Server error" }); }
+
+    // Welcome the new member (only on the pending → approved transition)
+    if (wasPending && user.email) {
+      const appUrl = process.env.APP_URL || "https://windfall-jvc3.onrender.com";
+      sendEmail({
+        to: user.email,
+        subject: "🍎 You're in! Welcome to Windfall",
+        html: welcomeEmailHtml(user.name, appUrl)
+      });
+    }
+  } catch (err) { console.error("Approve error:", err); res.status(500).json({ error: "Server error" }); }
 });
 
 app.delete("/api/admin/users/:id", authMiddleware, adminMiddleware, async (req, res) => {
