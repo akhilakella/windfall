@@ -27,6 +27,7 @@
       <h1 class="logo-text">Windfall</h1>
       <p class="logo-sub">Warwickshire's Apple Rescue Map</p>
     </div>
+    <div id="communityImpact" class="community-impact" style="display:none;"></div>
     <div class="auth-tabs">
       <button class="auth-tab active" data-tab="login">Sign In</button>
       <button class="auth-tab" data-tab="register">Join</button>
@@ -151,7 +152,8 @@
     <div class="top-bar-left"><img src="/icon.svg" alt="" class="top-icon" /><span class="top-title">Windfall</span></div>
     <div class="top-bar-right">
       <button class="icon-btn" id="heatmapBtn" title="Show heatmap" onclick="toggleHeatmap()">🌡️</button>
-      <button class="icon-btn" id="updatesBtn" title="Updates">📢</button>
+      <button class="icon-btn" id="notifsBtn" title="Notifications">🔔<span id="notifsBadge" class="icon-badge" style="display:none;">0</span></button>
+      <button class="icon-btn" id="updatesBtn" title="Updates">📢<span id="updatesDot" class="icon-dot" style="display:none;"></span></button>
       <button class="icon-btn" id="leaderboardBtn" title="Leaderboard">🏆</button>
       <button class="icon-btn" id="profileBtn" title="Profile">👤</button>
     </div>
@@ -208,6 +210,7 @@
         <option value="cherry">🍒 Cherry</option>
         <option value="other">🌳 Other</option>
       </select>
+      <div id="seasonHint" style="font-size:0.78rem;color:var(--text-sub);margin-top:2px;"></div>
     </div>
     <div class="field-group"><label>Land Type</label>
       <select id="landType">
@@ -337,6 +340,7 @@
       <div id="adminTopUsers" class="leaderboard-list"></div>
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
         <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin-bottom:2px;">📥 Export Data</h3>
+        <button class="btn-secondary btn-sm" id="sendDigestBtn">📧 Email me this week's digest</button>
         <button class="btn-secondary btn-sm" onclick="downloadCSV('trees')">📥 Export Trees CSV</button>
         <button class="btn-secondary btn-sm" onclick="downloadCSV('users')">📥 Export Users CSV</button>
         <h3 style="font-family:'Fraunces',serif;font-size:0.95rem;color:var(--text-sub);margin-top:8px;margin-bottom:2px;">🎴 Year Recap Card</h3>
@@ -385,6 +389,12 @@
 <div id="updatesPanel" class="panel">
   <div class="panel-header"><h2>📢 Updates</h2><button class="panel-close" id="closeUpdates">✕</button></div>
   <div class="panel-body"><div id="updatesList" class="my-trees-list"></div></div>
+</div>
+
+<!-- Notifications -->
+<div id="notifsPanel" class="panel">
+  <div class="panel-header"><h2>🔔 Notifications</h2><button class="panel-close" id="closeNotifs">✕</button></div>
+  <div class="panel-body"><div id="notifsList" class="my-trees-list"></div></div>
 </div>
 
 <!-- User Profile -->

@@ -41,6 +41,32 @@ function captureUserPos() {
   );
 }
 
+// ==================== HARVEST SEASONS ====================
+// Typical UK ripeness windows (months are 1-12, inclusive)
+const FRUIT_SEASONS = {
+  apple:  { from: 9, to: 10, label: "September–October" },
+  pear:   { from: 9, to: 10, label: "September–October" },
+  plum:   { from: 8, to: 9,  label: "August–September" },
+  cherry: { from: 7, to: 8,  label: "July–August" }
+};
+
+function inSeason(type) {
+  const s = FRUIT_SEASONS[type];
+  if (!s) return false;
+  const m = new Date().getMonth() + 1;
+  return m >= s.from && m <= s.to;
+}
+
+function updateSeasonHint() {
+  const el = document.getElementById("seasonHint");
+  const type = document.getElementById("treeType").value;
+  const s = FRUIT_SEASONS[type];
+  if (!s) { el.textContent = ""; return; }
+  el.innerHTML = inSeason(type)
+    ? `🌟 ${capitalise(type)}s are in season right now (${s.label})`
+    : `🗓️ ${capitalise(type)}s are usually ripe ${s.label} — double-check the fruit!`;
+}
+
 // ==================== INIT ====================
 document.addEventListener("DOMContentLoaded", async () => {
   registerSW();
@@ -58,6 +84,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("leaderboardSearch").addEventListener("input", (e) => renderLeaderboard(e.target.value.trim()));
   document.getElementById("myTreesSearch").addEventListener("input", renderMyTrees);
   document.getElementById("myTreesSort").addEventListener("change", renderMyTrees);
+  document.getElementById("notifsBtn").addEventListener("click", openNotifsPanel);
+  document.getElementById("treeType").addEventListener("change", updateSeasonHint);
+  loadCommunityImpact();
 
   document.getElementById("maintenanceRefreshBtn").addEventListener("click", async () => {
     showToast("Checking...");
@@ -329,6 +358,7 @@ async function showApp() {
   loadTrees();
   updateProfilePanel();
   captureUserPos();
+  checkAnnouncementsDot();
 
   if (!maintenancePollStarted) {
     maintenancePollStarted = true;
@@ -383,13 +413,17 @@ function addTreeMarker(tree) {
   if (markers[tree.id]) map.removeLayer(markers[tree.id]);
   const color = getStatusColor(tree.status), emoji = getFruitEmoji(tree.type);
   const verifiedBadge = tree.verified ? `<div style="position:absolute;top:-3px;right:-3px;background:#4CAF50;border:1.5px solid #111d10;border-radius:50%;width:14px;height:14px;font-size:9px;display:flex;align-items:center;justify-content:center;color:white;">✓</div>` : "";
-  const icon = L.divIcon({ className: "temp-pin", html: `<div style="position:relative;display:inline-block;"><div style="width:36px;height:36px;border-radius:50%;background:${color}22;border:2.5px solid ${color};box-shadow:0 0 10px ${color}88;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;">${emoji}</div>${verifiedBadge}</div>`, iconAnchor: [18,18], popupAnchor: [0,-20] });
+  // Ready trees currently in their harvest window get a gold "in season" ring
+  const seasonal = tree.status === "active" && inSeason(tree.type);
+  const glow = seasonal ? `box-shadow:0 0 10px ${color}88, 0 0 0 3px rgba(212,168,67,0.85), 0 0 14px rgba(212,168,67,0.6);` : `box-shadow:0 0 10px ${color}88;`;
+  const icon = L.divIcon({ className: "temp-pin", html: `<div style="position:relative;display:inline-block;"><div style="width:36px;height:36px;border-radius:50%;background:${color}22;border:2.5px solid ${color};${glow}display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;">${emoji}</div>${verifiedBadge}</div>`, iconAnchor: [18,18], popupAnchor: [0,-20] });
   const marker = L.marker([tree.lat, tree.lng], { icon });
   const kgText = tree.estimatedKg > 0 ? `~${tree.estimatedKg}kg` : "";
   // Popup content is a function so the distance reflects the user's position at open time
   marker.bindPopup(() => {
     const dist = distanceLabel(tree);
-    return `<div class="popup-title">${emoji} ${esc(capitalise(tree.type))} Tree</div><div class="popup-sub">${kgText ? esc(kgText) + " · " : ""}${esc(capitalise(tree.landType))} · by ${esc(tree.reportedByName)}${dist ? `<br/>📏 ${dist}` : ""}</div><button class="popup-btn" onclick="openTreePanel('${esc(tree.id)}')">View Details</button>`;
+    const seasonNote = tree.status === "active" && inSeason(tree.type) ? `<br/>🌟 In season now` : "";
+    return `<div class="popup-title">${emoji} ${esc(capitalise(tree.type))} Tree</div><div class="popup-sub">${kgText ? esc(kgText) + " · " : ""}${esc(capitalise(tree.landType))} · by ${esc(tree.reportedByName)}${dist ? `<br/>📏 ${dist}` : ""}${seasonNote}</div><button class="popup-btn" onclick="openTreePanel('${esc(tree.id)}')">View Details</button>`;
   });
   markers[tree.id] = marker;
   const typeOk = activeTypeFilter === "all" || tree.type === activeTypeFilter;
@@ -402,6 +436,7 @@ async function loadTrees() {
     const res = await fetch("/api/trees");
     allTrees = await res.json();
     allTrees.forEach(t => addTreeMarker(t));
+    refreshNotifsBadge();
     if (pendingTreeId) {
       const id = pendingTreeId; pendingTreeId = null;
       const tree = allTrees.find(t => t.id === id);
@@ -413,7 +448,7 @@ async function loadTrees() {
 
 // ==================== FAB / REPORT ====================
 function setupFAB() {
-  document.getElementById("addTreeBtn").addEventListener("click", () => { openPanel("reportPanel"); showToast("Tap the map to drop a pin 📍"); });
+  document.getElementById("addTreeBtn").addEventListener("click", () => { openPanel("reportPanel"); updateSeasonHint(); showToast("Tap the map to drop a pin 📍"); });
 
   document.getElementById("useLocationBtn").addEventListener("click", () => {
     if (!navigator.geolocation) { showToast("Geolocation not supported"); return; }
@@ -516,6 +551,7 @@ function openTreePanel(treeId) {
       ${tree.estimatedKg > 0 ? `<span class="tree-chip">~${esc(tree.estimatedKg)}kg</span>` : ""}
       <span class="tree-status-chip status-${esc(tree.status)}">${esc(capitalise(tree.status))}</span>
       ${distanceLabel(tree) ? `<span class="tree-chip">📏 ${distanceLabel(tree)}</span>` : ""}
+      ${FRUIT_SEASONS[tree.type] ? (inSeason(tree.type) ? '<span class="tree-chip" style="background:rgba(212,168,67,0.15);color:var(--gold);border-color:rgba(212,168,67,0.4);">🌟 In season now</span>' : `<span class="tree-chip">🗓️ Ripe ${FRUIT_SEASONS[tree.type].label}</span>`) : ""}
       ${tree.verified ? '<span class="tree-chip" style="background:rgba(76,175,80,0.15);color:#81c784;border-color:rgba(76,175,80,0.35);">✅ Verified</span>' : ""}
     </div>
     ${tree.notes ? `<p class="tree-notes">"${esc(tree.notes)}"</p>` : ""}
@@ -859,7 +895,7 @@ function setupNavButtons() {
 
 // ==================== PANELS ====================
 function setupPanelCloses() {
-  [["closeReport","reportPanel"],["closeTree","treePanel"],["closeProfile","profilePanel"],["closeLeaderboard","leaderboardPanel"],["closeMyTrees","myTreesPanel"],["closeContact","contactPanel"],["closeAdmin","adminPanel"],["closeUpdates","updatesPanel"],["closeUserProfile","userProfilePanel"],["closeAiChecker","aiCheckerPanel"]].forEach(([btnId, panelId]) => {
+  [["closeReport","reportPanel"],["closeTree","treePanel"],["closeProfile","profilePanel"],["closeLeaderboard","leaderboardPanel"],["closeMyTrees","myTreesPanel"],["closeContact","contactPanel"],["closeAdmin","adminPanel"],["closeUpdates","updatesPanel"],["closeUserProfile","userProfilePanel"],["closeAiChecker","aiCheckerPanel"],["closeNotifs","notifsPanel"]].forEach(([btnId, panelId]) => {
     document.getElementById(btnId).addEventListener("click", () => closePanel(panelId));
   });
   document.getElementById("overlay").addEventListener("click", closeAllPanels);
@@ -910,6 +946,16 @@ function setupAdminTabs() {
         loadAdminAnnouncements();
       } else showToast("Failed to post update");
     } catch { showToast("Error posting update"); }
+  });
+
+  document.getElementById("sendDigestBtn").addEventListener("click", async () => {
+    setLoading("sendDigestBtn", true, "📧 Email me this week's digest");
+    try {
+      const res = await apiFetch("/api/admin/send-digest", { method: "POST" });
+      if (res.ok) showToast("📧 Digest sent — check your inbox!");
+      else showToast("Failed to send digest");
+    } catch { showToast("Error sending digest"); }
+    finally { setLoading("sendDigestBtn", false, "📧 Email me this week's digest"); }
   });
 
   document.getElementById("toggleMaintenanceBtn").addEventListener("click", async () => {
@@ -1173,7 +1219,84 @@ async function openUpdatesPanel() {
             <div class="my-tree-notes" style="margin-top:4px;line-height:1.5;">${esc(p.body)}</div>
           </div>`).join("");
   } catch { showToast("Could not load updates"); return; }
+  localStorage.setItem("wf_seenUpdates", String(Date.now()));
+  document.getElementById("updatesDot").style.display = "none";
   openPanel("updatesPanel");
+}
+
+// Gold dot on the 📢 icon when there's an announcement newer than last seen
+async function checkAnnouncementsDot() {
+  try {
+    const res = await fetch("/api/announcements");
+    const posts = await res.json();
+    if (!Array.isArray(posts) || posts.length === 0) return;
+    const latest = Math.max(...posts.map(p => p.postedAt || 0));
+    const lastSeen = parseInt(localStorage.getItem("wf_seenUpdates") || "0", 10);
+    document.getElementById("updatesDot").style.display = latest > lastSeen ? "block" : "none";
+  } catch {}
+}
+
+// Community total on the sign-in screen — makes the app feel alive pre-login
+async function loadCommunityImpact() {
+  try {
+    const res = await fetch("/api/leaderboard");
+    const data = await res.json();
+    const kg = data.totalKg || 0;
+    if (kg > 0) {
+      const el = document.getElementById("communityImpact");
+      el.innerHTML = `🍎 <strong>${kg.toFixed(1)}kg</strong> of fruit rescued so far by the Warwickshire community`;
+      el.style.display = "block";
+    }
+  } catch {}
+}
+
+// ==================== NOTIFICATIONS ====================
+// Computed purely from data already in the app: comments and pickups
+// by OTHER people on trees YOU reported. No push infrastructure needed.
+function computeNotifications() {
+  if (!currentUser) return [];
+  const events = [];
+  allTrees.forEach(t => {
+    if (t.reportedBy !== currentUser.id) return;
+    (t.comments || []).forEach(c => {
+      if (c.userId !== currentUser.id) events.push({ at: c.at || 0, treeId: t.id, text: `💬 ${c.userName} commented on your ${capitalise(t.type)} tree`, sub: c.text });
+    });
+    (t.pickups || []).forEach(p => {
+      if (p.by !== currentUser.id) events.push({ at: p.at || 0, treeId: t.id, text: `🧺 ${p.byName} rescued ${p.kg}kg from your ${capitalise(t.type)} tree` });
+    });
+  });
+  events.sort((a, b) => b.at - a.at);
+  return events.slice(0, 30);
+}
+
+function refreshNotifsBadge() {
+  if (!currentUser) return;
+  const lastSeen = parseInt(localStorage.getItem("wf_seenNotifs") || "0", 10);
+  const unread = computeNotifications().filter(e => e.at > lastSeen).length;
+  const badge = document.getElementById("notifsBadge");
+  if (unread > 0) { badge.textContent = unread > 9 ? "9+" : unread; badge.style.display = "flex"; }
+  else badge.style.display = "none";
+}
+
+async function openNotifsPanel() {
+  // Refresh tree data first so brand-new comments/pickups show up
+  try {
+    const res = await fetch("/api/trees");
+    allTrees = await res.json();
+    allTrees.forEach(t => addTreeMarker(t));
+  } catch {}
+  const lastSeen = parseInt(localStorage.getItem("wf_seenNotifs") || "0", 10);
+  const events = computeNotifications();
+  document.getElementById("notifsList").innerHTML = events.length === 0
+    ? `<p style="color:var(--text-muted);text-align:center;">Nothing yet!<br><br>When someone comments on or picks fruit from one of your trees, you'll see it here. 🌿</p>`
+    : events.map(e => `
+        <div class="my-tree-card${e.at > lastSeen ? " notif-unread" : ""}" onclick="openTreePanel('${esc(e.treeId)}');closePanel('notifsPanel')">
+          <div class="my-tree-header"><span class="my-tree-type" style="font-size:0.88rem;">${esc(e.text)}</span><span class="my-tree-date">${timeSince(e.at)}</span></div>
+          ${e.sub ? `<div class="my-tree-notes">"${esc(e.sub)}"</div>` : ""}
+        </div>`).join("");
+  localStorage.setItem("wf_seenNotifs", String(Date.now()));
+  document.getElementById("notifsBadge").style.display = "none";
+  openPanel("notifsPanel");
 }
 
 // ==================== USER PROFILE ====================

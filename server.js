@@ -484,6 +484,117 @@ app.post("/api/admin/maintenance", authMiddleware, adminMiddleware, async (req, 
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
+// ---- WEEKLY ADMIN DIGEST ----
+async function buildWeeklyDigest() {
+  const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  const userKeys = await redis.keys("user:*");
+  let totalUsers = 0, pendingCount = 0;
+  const newUsers = [];
+  for (const key of userKeys) {
+    if (key.includes("email")) continue;
+    const parts = key.split(":");
+    if (parts.length !== 2) continue;
+    const u = JSON.parse(await redis.get(key));
+    if (!u) continue;
+    if (u.status === "pending") { pendingCount++; continue; }
+    if (u.status === "rejected") continue;
+    totalUsers++;
+    if ((u.joinedAt || 0) >= weekAgo) newUsers.push(u.name);
+  }
+  const treeKeys = await redis.keys("tree:*");
+  let totalTrees = 0, newTrees = 0, weekKg = 0, weekPickups = 0, totalKg = 0;
+  for (const key of treeKeys) {
+    const parts = key.split(":");
+    if (parts.length !== 2) continue;
+    const t = JSON.parse(await redis.get(key));
+    if (!t) continue;
+    totalTrees++;
+    if ((t.reportedAt || 0) >= weekAgo) newTrees++;
+    (t.pickups || []).forEach(p => {
+      totalKg += p.kg || 0;
+      if ((p.at || 0) >= weekAgo) { weekKg += p.kg || 0; weekPickups++; }
+    });
+  }
+  return { newUsers, pendingCount, totalUsers, newTrees, totalTrees, weekKg, weekPickups, totalKg };
+}
+
+function digestEmailHtml(d, appUrl) {
+  const row = (icon, label, value) => `<tr><td style="padding:8px 0;color:#8aab85;font-size:0.9rem;">${icon} ${label}</td><td style="padding:8px 0;text-align:right;color:#e8f0e6;font-weight:700;font-size:0.95rem;">${value}</td></tr>`;
+  return `
+  <div style="margin:0;padding:0;background:#0f1a0e;">
+    <div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:36px 30px;background:#111d10;border-radius:18px;color:#e8f0e6;">
+      <div style="text-align:center;">
+        <img src="${appUrl}/icon-192.png" alt="Windfall" width="64" height="64" style="width:64px;height:64px;object-fit:contain;" />
+        <div style="font-size:1.4rem;font-weight:800;letter-spacing:5px;margin:8px 0 2px;">WINDFALL</div>
+        <div style="font-size:0.85rem;color:#8aab85;">Your weekly digest 📋</div>
+        <div style="height:3px;width:60px;background:linear-gradient(90deg,#7db874,#d4a843);margin:16px auto 20px;border-radius:2px;"></div>
+      </div>
+      <h2 style="font-size:1rem;color:#d4a843;margin:0 0 6px;">This week</h2>
+      <table style="width:100%;border-collapse:collapse;border-bottom:1px solid rgba(74,124,63,0.25);margin-bottom:18px;">
+        ${row("🍏", "Fruit rescued", `${d.weekKg.toFixed(1)}kg`)}
+        ${row("🧺", "Pickups logged", d.weekPickups)}
+        ${row("🌳", "New trees mapped", d.newTrees)}
+        ${row("👥", "New members", d.newUsers.length ? esc(d.newUsers.join(", ")) : "none")}
+        ${row("⏳", "Awaiting approval", d.pendingCount > 0 ? `<span style="color:#ff8a7a;">${d.pendingCount} — action needed!</span>` : "0")}
+      </table>
+      <h2 style="font-size:1rem;color:#d4a843;margin:0 0 6px;">All time</h2>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+        ${row("🍎", "Total rescued", `${d.totalKg.toFixed(1)}kg`)}
+        ${row("🌳", "Trees on the map", d.totalTrees)}
+        ${row("👥", "Community members", d.totalUsers)}
+      </table>
+      <div style="text-align:center;">
+        <a href="${appUrl}" style="display:inline-block;background:#4a7c3f;color:#ffffff;padding:13px 34px;border-radius:12px;text-decoration:none;font-weight:700;font-size:0.95rem;">🍎 Open Windfall</a>
+      </div>
+    </div>
+    <div style="text-align:center;font-size:0.72rem;color:#3a4a37;padding:16px;">Windfall · Weekly admin digest · Sent every Monday morning</div>
+  </div>`;
+}
+
+// Most recent Monday 09:00 (server time). If we haven't sent since then, a digest is due.
+function lastMonday9am() {
+  const d = new Date();
+  d.setHours(9, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  if (d.getTime() > Date.now()) d.setDate(d.getDate() - 7);
+  return d.getTime();
+}
+
+async function sendWeeklyDigestIfDue() {
+  try {
+    const due = lastMonday9am();
+    const lastSent = parseInt(await redis.get("digest:lastSent") || "0", 10);
+    if (lastSent >= due) return;
+    await redis.set("digest:lastSent", String(Date.now())); // claim first so we never double-send
+    const d = await buildWeeklyDigest();
+    const appUrl = process.env.APP_URL || "https://windfall-jvc3.onrender.com";
+    await sendEmail({
+      to: ADMIN_EMAIL,
+      subject: `🍎 Windfall weekly digest — ${d.weekKg.toFixed(1)}kg rescued, ${d.newUsers.length} new member${d.newUsers.length === 1 ? "" : "s"}`,
+      html: digestEmailHtml(d, appUrl)
+    });
+    console.log("Weekly digest sent");
+  } catch (e) { console.error("Digest error:", e.message); }
+}
+// Check hourly while awake, and shortly after every boot — so on the free tier
+// (which sleeps when idle) the digest goes out on the first wake-up after Monday 9am.
+setInterval(sendWeeklyDigestIfDue, 60 * 60 * 1000);
+setTimeout(sendWeeklyDigestIfDue, 15000);
+
+// Manual trigger so the admin can test it / get one on demand
+app.post("/api/admin/send-digest", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const d = await buildWeeklyDigest();
+    const appUrl = process.env.APP_URL || "https://windfall-jvc3.onrender.com";
+    await sendEmail({
+      to: ADMIN_EMAIL,
+      subject: `🍎 Windfall weekly digest — ${d.weekKg.toFixed(1)}kg rescued this week`,
+      html: digestEmailHtml(d, appUrl)
+    });
+    res.json({ success: true });
+  } catch (err) { console.error("Manual digest error:", err); res.status(500).json({ error: "Server error" }); }
+});
+
 // ---- LEADERBOARD ----
 app.get("/api/leaderboard", async (req, res) => {
   try {

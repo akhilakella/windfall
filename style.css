@@ -255,6 +255,7 @@ option { background: var(--green-dark); }
 }
 .top-bar-right { display: flex; gap: 8px; }
 .icon-btn {
+  position: relative;
   background: rgba(255,255,255,0.07);
   border: 1px solid var(--border);
   border-radius: 50%;
@@ -265,6 +266,52 @@ option { background: var(--green-dark); }
   transition: background 0.2s;
 }
 .icon-btn:hover { background: rgba(255,255,255,0.14); }
+
+/* Red count badge on the notification bell */
+.icon-badge {
+  position: absolute;
+  top: -3px; right: -3px;
+  min-width: 16px; height: 16px;
+  padding: 0 4px;
+  border-radius: 100px;
+  background: var(--apple-warm);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--panel-bg);
+  box-shadow: 0 0 6px rgba(231,76,60,0.7);
+}
+
+/* Gold unread dot on the updates megaphone */
+.icon-dot {
+  position: absolute;
+  top: 2px; right: 3px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 1.5px solid var(--panel-bg);
+  box-shadow: 0 0 6px rgba(212,168,67,0.8);
+}
+
+/* Community impact counter on the sign-in screen */
+.community-impact {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-sub);
+  background: rgba(74,124,63,0.14);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: 9px 18px;
+  margin: 0 auto 18px;
+  max-width: fit-content;
+  line-height: 1.4;
+}
+.community-impact strong { color: var(--green-light); }
+
+/* Unread notification highlight */
+.notif-unread { border-left: 3px solid var(--gold); }
 
 /* ==================== LEGEND ==================== */
 .legend {
