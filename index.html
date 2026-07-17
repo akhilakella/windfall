@@ -2,6 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <script>
+    // Canonical domain: send browser visitors on the old onrender URL to the
+    // custom domain, but leave INSTALLED apps alone so existing installs keep
+    // working exactly as before (they launch in standalone/display-mode).
+    (function () {
+      try {
+        var OLD = "windfall-jvc3.onrender.com", NEW = "windfall-app.co.uk";
+        var installed = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone;
+        if (location.hostname === OLD && !installed) {
+          location.replace("https://" + NEW + location.pathname + location.search + location.hash);
+        }
+      } catch (e) {}
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Windfall</title>
   <meta name="description" content="Map apple trees in Warwickshire. Rescue fruit. Feed communities." />

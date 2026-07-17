@@ -135,6 +135,7 @@ const FEATURES = [
   ["Email: Resend integration",       [R.srv("api.resend.com/emails"), R.srv("RESEND_API_KEY")]],
 
   ["In-app confirm dialog",           [R.fn("confirmDialog"), R.css("confirm-overlay")]],
+  ["Canonical domain redirect",       [R.html("windfall-app.co.uk"), R.html("windfall-jvc3.onrender.com"), R.html("display-mode: standalone")]],
   ["PWA install (manifest)",          [R.html("manifest.json")]],
   ["Service worker registered",       [R.fn("registerSW"), R.app('register("/sw.js")')]]
   // (the SW cache-version string is checked explicitly after the loop below)
