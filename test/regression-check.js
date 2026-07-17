@@ -2,16 +2,16 @@
 // ============================================================
 // WINDFALL — Regression Check Pack
 // ------------------------------------------------------------
-// A fast, dependency-free static check that catches the kinds of
-// bugs that have actually broken Windfall in the past — silently
-// dead buttons, missing handlers, typo'd element IDs, and calls to
-// API endpoints that don't exist on the server.
+// Fast, dependency-free static checks that catch the bugs that
+// have actually broken Windfall: dead buttons, missing handlers,
+// typo'd element IDs, calls to routes that don't exist — PLUS a
+// full FEATURE INVENTORY that verifies every single feature is
+// still wired end-to-end (button -> handler -> element -> route).
 //
-// Run it after EVERY change, before you push:
+// Run after EVERY change, before you push:
 //     npm test
-//   (or)  node test/regression-check.js
 //
-// Exit code 0 = all good. Exit code 1 = something is broken.
+// Exit 0 = all good. Exit 1 = something is broken.
 // ============================================================
 
 const fs = require("fs");
@@ -21,178 +21,232 @@ const { execSync } = require("child_process");
 const ROOT = path.join(__dirname, "..");
 const read = f => fs.readFileSync(path.join(ROOT, f), "utf8");
 
-let errors = 0;
-let warnings = 0;
-const fail = msg => { errors++; console.log(`  \x1b[31m✗ ${msg}\x1b[0m`); };
-const warn = msg => { warnings++; console.log(`  \x1b[33m! ${msg}\x1b[0m`); };
-const ok = msg => console.log(`  \x1b[32m✓ ${msg}\x1b[0m`);
-const section = title => console.log(`\n\x1b[1m${title}\x1b[0m`);
-
-// Turn a character offset into a 1-based line number for friendly errors
-function lineAt(text, index) {
-  return text.slice(0, index).split("\n").length;
-}
+let errors = 0, warnings = 0;
+const fail = m => { errors++; console.log(`  \x1b[31m✗ ${m}\x1b[0m`); };
+const warn = m => { warnings++; console.log(`  \x1b[33m! ${m}\x1b[0m`); };
+const ok   = m => console.log(`  \x1b[32m✓ ${m}\x1b[0m`);
+const section = t => console.log(`\n\x1b[1m${t}\x1b[0m`);
+const lineAt = (text, i) => text.slice(0, i).split("\n").length;
 
 const appJs = read("app.js");
 const indexHtml = read("index.html");
 const serverJs = read("server.js");
+const styleCss = read("style.css");
+const swJs = read("sw.js");
+
+// ---------- reusable predicates ----------
+const appHasFn = n => new RegExp(`\\bfunction\\s+${n}\\b`).test(appJs) || new RegExp(`\\bwindow\\.${n}\\s*=`).test(appJs) || new RegExp(`\\b(const|let|var)\\s+${n}\\b`).test(appJs);
+const srvHasFn = n => new RegExp(`\\bfunction\\s+${n}\\b`).test(serverJs);
+const idExists = id => new RegExp(`id=\\\\?["']${id}\\\\?["']`).test(indexHtml) || new RegExp(`id=\\\\?["']${id}\\\\?["']`).test(appJs);
+const routeExists = p => new RegExp(`app\\.(get|post|patch|put|delete)\\(\\s*["'\`]${p.replace(/[/]/g, "\\/").replace(/:/g, ":")}`).test(serverJs);
+const appHas = s => appJs.includes(s);
+const srvHas = s => serverJs.includes(s);
+const htmlHas = s => indexHtml.includes(s);
+const cssHas = s => styleCss.includes(s);
+
+// req kinds: fn(app), srvfn, id, route, app, srv, html, css
+const R = {
+  fn:    n => ({ label: `app fn ${n}()`,        test: () => appHasFn(n) }),
+  srvfn: n => ({ label: `server fn ${n}()`,     test: () => srvHasFn(n) }),
+  id:    n => ({ label: `element #${n}`,        test: () => idExists(n) }),
+  route: p => ({ label: `route ${p}`,           test: () => routeExists(p) }),
+  app:   s => ({ label: `app.js: "${s}"`,       test: () => appHas(s) }),
+  srv:   s => ({ label: `server.js: "${s}"`,    test: () => srvHas(s) }),
+  html:  s => ({ label: `index.html: "${s}"`,   test: () => htmlHas(s) }),
+  css:   s => ({ label: `style.css: "${s}"`,    test: () => cssHas(s) })
+};
 
 // ============================================================
-// CHECK 0 — JavaScript syntax (catches typos, unclosed brackets)
+// THE FEATURE INVENTORY — every feature, and what proves it exists.
+// Add a line here whenever you add a feature.
+// ============================================================
+const FEATURES = [
+  ["Register / sign-up",              [R.route("/api/register"), R.fn("doRegister"), R.id("regEmail"), R.id("registerBtn")]],
+  ["Login",                           [R.route("/api/login"), R.fn("doLogin"), R.id("loginEmail"), R.id("loginBtn")]],
+  ["Sign-in liquid loader",           [R.id("loginLoader"), R.css("liquid-fill")]],
+  ["Logout",                          [R.id("logoutBtn")]],
+  ["Forgot password",                 [R.route("/api/forgot-password"), R.id("forgotEmail"), R.id("sendResetBtn")]],
+  ["Reset password",                  [R.route("/api/reset-password"), R.fn("checkResetToken"), R.id("resetNewPass")]],
+  ["Change password",                 [R.route("/api/change-password"), R.id("changePassBtn")]],
+  ["Pending-approval screen",         [R.id("pendingScreen")]],
+
+  ["Map + markers",                   [R.route("/api/trees"), R.fn("initMap"), R.fn("addTreeMarker"), R.fn("loadTrees"), R.fn("getStatusColor"), R.fn("getFruitEmoji")]],
+  ["Public read-only map",            [R.fn("openPublicMap"), R.fn("initPublicMap"), R.id("publicMapScreen")]],
+  ["Report a tree",                   [R.fn("submitTree"), R.id("reportPanel"), R.id("treeType"), R.id("landType"), R.id("submitTreeBtn")]],
+  ["Use my location (geocode)",       [R.id("useLocationBtn"), R.app("nominatim")]],
+  ["Photo upload + compression",      [R.fn("compressImage"), R.srv("memoryStorage"), R.srv("base64")]],
+  ["AI fruit checker (inline)",       [R.route("/api/ai-check"), R.id("aiCheckBtn"), R.id("aiResult")]],
+  ["AI fruit checker (standalone)",   [R.fn("openAiCheckerPanel"), R.id("aiCheckerPanel"), R.id("aiCheckerRunBtn")]],
+  ["AI model fallback chain",         [R.srv("for (const model of models)")]],
+
+  ["Tree detail panel",               [R.fn("openTreePanel"), R.id("treePanel")]],
+  ["Log a pickup",                    [R.route("/api/trees/:id/pickup"), R.fn("logPickup")]],
+  ["Pickup destination (where fruit went)", [R.id("pickupDest"), R.app("DEST_META"), R.srv("validDests")]],
+  ["Comments on trees",               [R.route("/api/trees/:id/comments"), R.fn("addComment")]],
+  ["Update tree status",              [R.route("/api/trees/:id/status"), R.fn("updateTreeStatus")]],
+  ["Get directions link",            [R.app("google.com/maps/dir")]],
+  ["Share a tree",                    [R.fn("shareTree"), R.app("/tree/"), R.app("navigator.share")]],
+  ["Shared /tree/:id deep link",      [R.app("pendingTreeId"), R.app("/^\\/tree\\/")]],
+
+  ["Filter by fruit type",            [R.app("activeTypeFilter"), R.html('data-filter-type="apple"')]],
+  ["Filter by status",                [R.app("activeStatusFilter"), R.html('data-filter-status="active"')]],
+  ["Filter by distance (1/5/10/custom)", [R.app("activeDistFilter"), R.id("customDistInput"), R.html('data-filter-dist="1"'), R.html('data-filter-dist="custom"')]],
+  ["Distance-from-me labels",         [R.fn("distanceKm"), R.fn("distanceLabel"), R.fn("captureUserPos")]],
+  ["Heatmap toggle",                  [R.fn("toggleHeatmap"), R.id("heatmapBtn")]],
+
+  ["Leaderboard / rankings",          [R.route("/api/leaderboard"), R.fn("openLeaderboard"), R.fn("renderLeaderboard")]],
+  ["Leaderboard search",              [R.id("leaderboardSearch")]],
+  ["Community impact breakdown",      [R.app("destTotals")]],
+  ["My Trees list",                   [R.fn("openMyTrees"), R.fn("renderMyTrees"), R.id("myTreesList")]],
+  ["My Trees search + sort",          [R.id("myTreesSearch"), R.id("myTreesSort")]],
+  ["Profile + stats",                 [R.route("/api/me"), R.fn("updateProfilePanel"), R.id("statKg")]],
+  ["Badges",                          [R.srvfn("computeBadges"), R.app("badgeMap"), R.srv("windfall-legend")]],
+  ["Public user profiles",            [R.route("/api/users/:id/profile"), R.fn("openUserProfile")]],
+
+  ["Community impact counter (sign-in)", [R.fn("loadCommunityImpact"), R.id("communityImpact"), R.css("community-impact")]],
+  ["Announcements (view)",            [R.route("/api/announcements"), R.fn("openUpdatesPanel"), R.id("updatesBtn")]],
+  ["Announcement unread dot",         [R.fn("checkAnnouncementsDot"), R.id("updatesDot"), R.app("wf_seenUpdates"), R.css("icon-dot")]],
+  ["Notification bell",               [R.fn("openNotifsPanel"), R.fn("computeNotifications"), R.fn("refreshNotifsBadge"), R.id("notifsBtn"), R.id("notifsBadge"), R.app("wf_seenNotifs")]],
+
+  ["Seasonal harvest calendar",       [R.app("FRUIT_SEASONS"), R.fn("inSeason"), R.fn("openSeasonsPanel"), R.id("seasonsBtn"), R.id("seasonsPanel"), R.css("season-strip")]],
+  ["Season hint in report form",      [R.fn("updateSeasonHint"), R.id("seasonHint")]],
+  ["In-season map glow",              [R.app("seasonal"), R.app("rgba(212,168,67")]],
+
+  ["Maintenance mode",                [R.route("/api/maintenance"), R.route("/api/admin/maintenance"), R.fn("checkMaintenanceMode"), R.fn("loadMaintenanceStatus"), R.id("maintenanceScreen"), R.id("toggleMaintenanceBtn")]],
+
+  ["Admin panel",                     [R.route("/api/admin/check"), R.fn("openAdminPanel"), R.id("adminPanel")]],
+  ["Admin: approve requests",         [R.route("/api/admin/requests"), R.route("/api/admin/approve/:id"), R.fn("loadAdminRequests"), R.fn("approveUser")]],
+  ["Admin: reject / delete users",    [R.route("/api/admin/users/:id"), R.fn("rejectUser"), R.fn("deleteUser")]],
+  ["Admin: pending-count badge",      [R.fn("refreshAdminBadge"), R.fn("setAdminBadge"), R.id("adminBadge")]],
+  ["Admin: analytics",                [R.route("/api/admin/analytics"), R.fn("loadAdminAnalytics")]],
+  ["Admin: manage trees",             [R.route("/api/admin/trees/:id"), R.fn("loadAdminTrees"), R.fn("openEditTree"), R.fn("saveEditTree")]],
+  ["Admin: verify tree",              [R.fn("toggleVerifyTree")]],
+  ["Admin: delete tree",              [R.route("/api/trees/:id"), R.fn("deleteTree")]],
+  ["Admin: announcements post/delete",[R.route("/api/admin/announcements"), R.fn("loadAdminAnnouncements"), R.fn("deleteAnnouncement")]],
+  ["Admin: reset all stats",          [R.route("/api/admin/reset-stats"), R.id("resetStatsBtn")]],
+  ["Admin: manage users list",        [R.route("/api/admin/users"), R.fn("loadAdminUsers")]],
+  ["CSV export",                      [R.fn("downloadCSV"), R.fn("buildAndDownloadCSV")]],
+  ["Year recap card",                 [R.fn("showYearCard"), R.fn("drawYearCard"), R.fn("downloadYearCard")]],
+
+  ["Email: new-user notification",    [R.srvfn("sendEmail"), R.srv("New Windfall sign-up")]],
+  ["Email: welcome on approve",       [R.srvfn("welcomeEmailHtml"), R.srv("welcomeEmailHtml(user.name")]],
+  ["Email: password reset",           [R.srv("Reset your Windfall password")]],
+  ["Email: weekly admin digest",      [R.srvfn("buildWeeklyDigest"), R.srvfn("digestEmailHtml"), R.srvfn("sendWeeklyDigestIfDue"), R.route("/api/admin/send-digest"), R.id("sendDigestBtn")]],
+  ["Email: Resend integration",       [R.srv("api.resend.com/emails"), R.srv("RESEND_API_KEY")]],
+
+  ["In-app confirm dialog",           [R.fn("confirmDialog"), R.css("confirm-overlay")]],
+  ["PWA install (manifest)",          [R.html("manifest.json")]],
+  ["Service worker registered",       [R.fn("registerSW"), R.app('register("/sw.js")')]]
+  // (the SW cache-version string is checked explicitly after the loop below)
+];
+
+// ============================================================
+// CHECK 0 — JavaScript syntax
 // ============================================================
 section("0. JavaScript syntax");
-for (const file of ["app.js", "server.js", "sw.js"]) {
-  try {
-    execSync(`node --check "${path.join(ROOT, file)}"`, { stdio: "pipe" });
-    ok(`${file} parses`);
-  } catch (e) {
-    fail(`${file} has a syntax error:\n${e.stderr ? e.stderr.toString() : e.message}`);
-  }
+for (const file of ["app.js", "server.js", "sw.js", "test/regression-check.js"]) {
+  try { execSync(`node --check "${path.join(ROOT, file)}"`, { stdio: "pipe" }); ok(`${file} parses`); }
+  catch (e) { fail(`${file} syntax error:\n${e.stderr ? e.stderr.toString() : e.message}`); }
 }
 
-// ============================================================
-// Collect inline event handlers from app.js + index.html.
-// Matches on*="..." (the value stops at the first double-quote,
-// which is exactly how the browser parses it too).
-// ============================================================
+// ---------- inline handler collection (shared by A & B) ----------
 function collectHandlers(text, fileName) {
   const re = /\son(click|change|input|submit|error|keydown|keyup)="([^"]*)"/g;
-  const out = [];
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    out.push({ event: m[1], value: m[2], file: fileName, line: lineAt(text, m.index) });
-  }
+  const out = []; let m;
+  while ((m = re.exec(text)) !== null) out.push({ event: m[1], value: m[2], file: fileName, line: lineAt(text, m.index) });
   return out;
 }
 const handlers = [...collectHandlers(appJs, "app.js"), ...collectHandlers(indexHtml, "index.html")];
 
 // ============================================================
-// CHECK A — inline handler attribute integrity
-// The bug that bit us: JSON.stringify() inside a double-quoted
-// onclick emits its own double-quotes and closes the attribute
-// early, so the button silently does nothing.
+// CHECK A — inline handler attributes are well-formed
 // ============================================================
-section("A. Inline handler attributes are well-formed");
-let attrIssues = 0;
-for (const h of handlers) {
-  if (/JSON\.stringify/.test(h.value)) {
-    fail(`${h.file}:${h.line} — on${h.event} uses JSON.stringify(), which emits double-quotes and breaks the attribute. Pass an id only, or use single quotes.`);
-    attrIssues++;
-  }
+section("A. Inline handler attributes well-formed");
+let aBad = 0;
+for (const h of handlers) if (/JSON\.stringify/.test(h.value)) { fail(`${h.file}:${h.line} — on${h.event} uses JSON.stringify() (breaks the attribute; pass an id only).`); aBad++; }
+if (!aBad) ok(`${handlers.length} inline handlers, none use quote-breaking patterns`);
+
+// ============================================================
+// CHECK B — inline handlers call real global functions
+// ============================================================
+section("B. Inline handlers point at real global functions");
+const GLOBALS = new Set(["document","window","this","event","alert","confirm","prompt","sendPrompt","console"]);
+const defined = new Set();
+for (const m of appJs.matchAll(/\bfunction\s+([A-Za-z_]\w*)\s*\(/g)) defined.add(m[1]);
+for (const m of appJs.matchAll(/\bwindow\.([A-Za-z_]\w*)\s*=/g)) defined.add(m[1]);
+let bBad = 0;
+for (const h of handlers) for (const c of h.value.matchAll(/(?:^|[^.\w$])([A-Za-z_]\w*)\s*\(/g)) {
+  const n = c[1];
+  if (GLOBALS.has(n) || defined.has(n)) continue;
+  fail(`${h.file}:${h.line} — on${h.event} calls "${n}(...)" but no global function "${n}" exists.`); bBad++;
 }
-if (attrIssues === 0) ok(`${handlers.length} inline handlers, none use quote-breaking patterns`);
+if (!bBad) ok("every inline handler resolves to a defined global function");
 
 // ============================================================
-// CHECK B — every inline handler calls a function that exists
-// and is reachable from global scope (top-level `function NAME`
-// or `window.NAME =`). Catches renamed/removed/forgotten-export
-// handlers — i.e. buttons wired to nothing.
-// ============================================================
-section("B. Inline handlers point at real, global functions");
-const GLOBALS = new Set(["document", "window", "this", "event", "alert", "confirm", "prompt", "sendPrompt", "console"]);
-const definedFns = new Set();
-for (const m of appJs.matchAll(/\bfunction\s+([A-Za-z_]\w*)\s*\(/g)) definedFns.add(m[1]);
-for (const m of appJs.matchAll(/\bwindow\.([A-Za-z_]\w*)\s*=/g)) definedFns.add(m[1]);
-
-let handlerIssues = 0;
-for (const h of handlers) {
-  // pull out each "name(" call in the handler (skip .method() calls)
-  for (const call of h.value.matchAll(/(?:^|[^.\w$])([A-Za-z_]\w*)\s*\(/g)) {
-    const name = call[1];
-    if (GLOBALS.has(name) || definedFns.has(name)) continue;
-    fail(`${h.file}:${h.line} — on${h.event} calls "${name}(...)" but no global function "${name}" is defined (add it or window.${name} = ...).`);
-    handlerIssues++;
-  }
-}
-if (handlerIssues === 0) ok("every inline handler resolves to a defined global function");
-
-// ============================================================
-// CHECK C — getElementById ids that don't exist anywhere
-// Looks at plain-string ids only (skips dynamic `${...}` ids).
-// "Defined" = an id="..." in index.html OR built in an app.js
-// template string (e.g. the admin badge created via innerHTML).
+// CHECK C — getElementById targets exist
 // ============================================================
 section("C. getElementById targets exist");
 const definedIds = new Set();
 for (const m of indexHtml.matchAll(/\bid=["']([^"']+)["']/g)) definedIds.add(m[1]);
-// ids created dynamically inside app.js template strings (no ${ } in them)
-for (const m of appJs.matchAll(/\bid=["']([^"'${}]+)["']/g)) definedIds.add(m[1]);
-
-const referencedIds = new Map(); // id -> first line
-for (const m of appJs.matchAll(/getElementById\(\s*["']([^"'`]+)["']\s*\)/g)) {
-  if (!referencedIds.has(m[1])) referencedIds.set(m[1], lineAt(appJs, m.index));
-}
-let missingIds = 0;
-for (const [id, line] of referencedIds) {
-  if (!definedIds.has(id)) {
-    warn(`app.js:${line} — getElementById("${id}") has no matching element in index.html or app.js templates.`);
-    missingIds++;
-  }
-}
-if (missingIds === 0) ok(`${referencedIds.size} element IDs all resolve`);
+for (const m of appJs.matchAll(/\bid=\\?["']([^"'${}\\]+)\\?["']/g)) definedIds.add(m[1]);
+const refIds = new Map();
+for (const m of appJs.matchAll(/getElementById\(\s*["']([^"'`]+)["']\s*\)/g)) if (!refIds.has(m[1])) refIds.set(m[1], lineAt(appJs, m.index));
+let cBad = 0;
+for (const [id, ln] of refIds) if (!definedIds.has(id)) { warn(`app.js:${ln} — getElementById("${id}") has no matching element.`); cBad++; }
+if (!cBad) ok(`${refIds.size} element IDs all resolve`);
 
 // ============================================================
-// CHECK D — every /api/... the frontend calls has a server route
-// Catches endpoint typos and routes that were renamed on one side
-// only. Dynamic segments (${id}) are normalised to match :params.
+// CHECK D — frontend API calls have server routes
 // ============================================================
-section("D. Frontend API calls have matching server routes");
-// Build the set of server routes as matchers
+section("D. Frontend API calls have server routes");
 const routes = [];
-for (const m of serverJs.matchAll(/app\.(get|post|patch|put|delete)\(\s*["'`]([^"'`]+)["'`]/g)) {
-  routes.push({ method: m[1].toUpperCase(), path: m[2] });
-}
-function routeMatches(callPath) {
-  // normalise the frontend path: collapse any ${...} or trailing / into a wildcard segment
-  const norm = callPath.replace(/\$\{[^}]*\}/g, "*").replace(/\/+$/, "");
-  return routes.some(r => {
-    const rp = r.path.replace(/:[^/]+/g, "*").replace(/\/+$/, "");
-    if (rp === norm) return true;
-    // allow frontend "/api/x" to match route "/api/x/*" when it appends an id at call time
-    return rp.replace(/\/\*$/, "") === norm.replace(/\/\*$/, "");
-  });
-}
-// collect api paths used in fetch/apiFetch
+for (const m of serverJs.matchAll(/app\.(get|post|patch|put|delete)\(\s*["'`]([^"'`]+)["'`]/g)) routes.push(m[2]);
+const routeMatches = call => {
+  const norm = call.replace(/\$\{[^}]*\}/g, "*").replace(/\/+$/, "");
+  return routes.some(r => { const rp = r.replace(/:[^/]+/g, "*").replace(/\/+$/, ""); return rp === norm || rp.replace(/\/\*$/, "") === norm.replace(/\/\*$/, ""); });
+};
 const apiCalls = new Map();
-for (const m of appJs.matchAll(/["'`](\/api\/[A-Za-z0-9/_$\-{}.]+)["'`]/g)) {
-  const p = m[1];
-  if (!apiCalls.has(p)) apiCalls.set(p, lineAt(appJs, m.index));
-}
-let routeMisses = 0;
-for (const [p, line] of apiCalls) {
-  if (!routeMatches(p)) {
-    warn(`app.js:${line} — calls "${p}" but no matching route found in server.js.`);
-    routeMisses++;
-  }
-}
-if (routeMisses === 0) ok(`${apiCalls.size} API calls all map to a server route`);
+for (const m of appJs.matchAll(/["'`](\/api\/[A-Za-z0-9/_$\-{}.]+)["'`]/g)) if (!apiCalls.has(m[1])) apiCalls.set(m[1], lineAt(appJs, m.index));
+let dBad = 0;
+for (const [p, ln] of apiCalls) if (!routeMatches(p)) { warn(`app.js:${ln} — calls "${p}" but no matching server route.`); dBad++; }
+if (!dBad) ok(`${apiCalls.size} API calls all map to a server route`);
 
 // ============================================================
-// CHECK E — bottom-nav buttons are all handled
-// Every data-view="X" should be handled by the nav click logic.
+// CHECK E — bottom-nav buttons all handled
 // ============================================================
-section("E. Bottom-nav buttons are all handled");
+section("E. Bottom-nav buttons all handled");
 const navViews = [...indexHtml.matchAll(/data-view="([^"]+)"/g)].map(m => m[1]);
-const handledViews = new Set();
-// matches like:  view === "map"   or  view === 'profile'
-for (const m of appJs.matchAll(/view\s*===\s*["']([^"']+)["']/g)) handledViews.add(m[1]);
-// "admin" is wired up dynamically when the admin logs in
-handledViews.add("admin");
-let navIssues = 0;
-for (const v of navViews) {
-  if (!handledViews.has(v)) { fail(`index.html — bottom-nav button data-view="${v}" has no handler in app.js.`); navIssues++; }
+const handled = new Set(["admin"]);
+for (const m of appJs.matchAll(/view\s*===\s*["']([^"']+)["']/g)) handled.add(m[1]);
+let eBad = 0;
+for (const v of navViews) if (!handled.has(v)) { fail(`nav data-view="${v}" has no handler.`); eBad++; }
+if (!eBad) ok(`${navViews.length} nav buttons all have handlers`);
+
+// ============================================================
+// CHECK F — FEATURE INVENTORY (the big one)
+// ============================================================
+section("F. Feature inventory — every feature wired end-to-end");
+let featOk = 0, featBad = 0;
+for (const [name, reqs] of FEATURES) {
+  if (!reqs) continue;
+  const missing = reqs.filter(r => r && typeof r.test === "function" && !r.test()).map(r => r.label);
+  if (missing.length) { fail(`${name} — missing: ${missing.join("; ")}`); featBad++; }
+  else featOk++;
 }
-if (navIssues === 0) ok(`${navViews.length} nav buttons all have handlers`);
+// service worker cache version (explicit, keeps the table clean)
+if (/const CACHE = "windfall-v\d+"/.test(swJs)) featOk++;
+else { fail("Service worker — CACHE version string missing/!matching windfall-vN"); featBad++; }
+if (!featBad) ok(`all ${featOk} features present and wired`);
+else ok(`${featOk} features OK`);
 
 // ============================================================
 // Summary
 // ============================================================
-console.log("\n" + "─".repeat(52));
-if (errors === 0 && warnings === 0) {
-  console.log("\x1b[32m\x1b[1m✓ ALL CHECKS PASSED — safe to push.\x1b[0m");
-} else {
-  if (warnings) console.log(`\x1b[33m${warnings} warning(s) — review, but not necessarily broken.\x1b[0m`);
-  if (errors) console.log(`\x1b[31m\x1b[1m✗ ${errors} error(s) — fix these before pushing.\x1b[0m`);
+console.log("\n" + "─".repeat(56));
+if (!errors && !warnings) console.log("\x1b[32m\x1b[1m✓ ALL CHECKS PASSED — safe to push.\x1b[0m");
+else {
+  if (warnings) console.log(`\x1b[33m${warnings} warning(s) — review, may be fine.\x1b[0m`);
+  if (errors) console.log(`\x1b[31m\x1b[1m✗ ${errors} error(s) — fix before pushing.\x1b[0m`);
 }
-console.log("─".repeat(52));
+console.log("─".repeat(56));
 process.exit(errors > 0 ? 1 : 0);
