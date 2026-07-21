@@ -243,6 +243,19 @@ app.patch("/api/trees/:id/pickup", authMiddleware, async (req, res) => {
     const user = JSON.parse(await redis.get(`user:${req.user.id}`));
     user.kgRescued = (user.kgRescued || 0) + kgNum;
     user.pickups = (user.pickups || 0) + 1;
+    // Track distinct fruit types picked (for the all-rounder badge)
+    if (["apple", "pear", "plum", "cherry"].includes(tree.type)) {
+      user.pickedTypes = Array.from(new Set([...(user.pickedTypes || []), tree.type]));
+    }
+    // Night owl: a pickup logged between 9pm and 5am
+    const hr = new Date().getHours();
+    if (hr >= 21 || hr < 5) user.nightOwl = true;
+    // Season opener: the first person to log a pickup this calendar year
+    const year = new Date().getFullYear();
+    const openerKey = `season:opener:${year}`;
+    const opener = await redis.get(openerKey);
+    if (!opener) { await redis.set(openerKey, req.user.id); user.seasonOpener = true; }
+    else if (opener === req.user.id) { user.seasonOpener = true; }
     user.badges = computeBadges(user);
     await redis.set(`user:${req.user.id}`, JSON.stringify(user));
     res.json(tree);
@@ -598,31 +611,46 @@ app.post("/api/admin/send-digest", authMiddleware, adminMiddleware, async (req, 
 // ---- LEADERBOARD ----
 app.get("/api/leaderboard", async (req, res) => {
   try {
-    const keys = await redis.keys("user:*");
-    const users = [];
-    let totalKg = 0;
-    for (const key of keys) {
+    const season = req.query.period === "season";
+    const seasonStart = new Date(new Date().getFullYear(), 0, 1).getTime();
+
+    // Load eligible users
+    const userKeys = await redis.keys("user:*");
+    const userMap = {};
+    for (const key of userKeys) {
       if (key.includes("email")) continue;
       if (!key.startsWith("user:")) continue;
       const u = JSON.parse(await redis.get(key));
       if (u && u.name && u.status !== "pending" && u.status !== "rejected") {
-        u.badges = computeBadges(u);
-        await redis.set(key, JSON.stringify(u));
-        totalKg += u.kgRescued || 0;
-        users.push({ id: u.id, name: u.name, email: u.email, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, badges: u.badges || [] });
+        userMap[u.id] = { id: u.id, name: u.name, email: u.email, badges: u.badges || [], allTimeKg: u.kgRescued || 0, allTimePickups: u.pickups || 0 };
       }
     }
-    users.sort((a, b) => b.kgRescued - a.kgRescued);
+
+    // Aggregate trees + pickups (respecting the season window when requested)
     const treeKeys = await redis.keys("tree:*");
-    const treeCounts = {};
+    const treeCounts = {}, seasonKg = {}, seasonPickups = {};
     for (const key of treeKeys) {
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       const t = JSON.parse(await redis.get(key));
-      if (t && t.reportedBy) treeCounts[t.reportedBy] = (treeCounts[t.reportedBy] || 0) + 1;
+      if (!t) continue;
+      if (t.reportedBy && (!season || (t.reportedAt || 0) >= seasonStart)) treeCounts[t.reportedBy] = (treeCounts[t.reportedBy] || 0) + 1;
+      (t.pickups || []).forEach(p => {
+        if (season && (p.at || 0) < seasonStart) return;
+        seasonKg[p.by] = (seasonKg[p.by] || 0) + (p.kg || 0);
+        seasonPickups[p.by] = (seasonPickups[p.by] || 0) + 1;
+      });
     }
-    users.forEach(u => { u.treesReported = treeCounts[u.id] || 0; });
-    res.json({ users: users.slice(0, 20), totalKg });
+
+    let users = Object.values(userMap).map(u => ({
+      id: u.id, name: u.name, email: u.email, badges: u.badges,
+      kgRescued: season ? (seasonKg[u.id] || 0) : u.allTimeKg,
+      pickups: season ? (seasonPickups[u.id] || 0) : u.allTimePickups,
+      treesReported: treeCounts[u.id] || 0
+    }));
+    users.sort((a, b) => b.kgRescued - a.kgRescued);
+    const totalKg = users.reduce((s, u) => s + u.kgRescued, 0);
+    res.json({ users: users.slice(0, 20), totalKg, period: season ? "season" : "all", seasonLabel: String(new Date().getFullYear()) });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
@@ -638,6 +666,10 @@ function computeBadges(user) {
   if (user.kgRescued >= 50) badges.push("animal-hero");
   if (user.kgRescued >= 200) badges.push("windfall-legend");
   if (user.pickups >= 5) badges.push("gleaner");
+  const picked = user.pickedTypes || [];
+  if (["apple", "pear", "plum", "cherry"].every(t => picked.includes(t))) badges.push("all-rounder");
+  if (user.nightOwl) badges.push("night-owl");
+  if (user.seasonOpener) badges.push("season-opener");
   return badges;
 }
 

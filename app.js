@@ -49,11 +49,11 @@ function captureUserPos() {
 // Shown once per device. Existing users have never had the flag set, so they
 // get it the first time they open the app after this update, then never again.
 const TOUR_SLIDES = [
-  { emoji: "🍎", title: "Welcome to Windfall!", body: "Every autumn, tonnes of fruit fall from trees around Warwickshire and rot on the ground. Windfall maps those trees so the community can rescue the fruit instead. Here's a quick tour!" },
-  { emoji: "🗺️", title: "Find fruit on the map", body: "Green pins are ready to pick, blue are already picked, red are past their best. Use the filter pills at the top to narrow by fruit type, status, or how far away it is. A gold glow means it's in season right now!" },
-  { emoji: "➕", title: "Report a tree", body: "Spotted a tree loaded with fruit? Tap the ＋ button, drop a pin on the map, and add a photo. The AI Fruit Checker can even look at your photo and tell you whether the fruit looks good enough to eat." },
-  { emoji: "🧺", title: "Log your pickup", body: "Rescued some fruit? Open the tree and log how many kg you collected, plus where it went — eaten fresh, animal feed, juice, baking, or donated. That's what builds our community total." },
-  { emoji: "🏆", title: "Earn badges & climb the rankings", body: "Every kilo counts towards your badges and the Warwickshire leaderboard. Tap 🔔 for updates on your trees, 📢 for news, and 🗓️ to see what's in season. Let's rescue some fruit!" }
+  { emoji: "🍎", title: "Welcome to Windfall", body: "Every autumn, huge amounts of fruit fall from trees across Warwickshire and rot on the ground. Windfall maps those trees so the community can rescue the fruit before it goes to waste. Here is a quick tour to show you around." },
+  { emoji: "🗺️", title: "Find fruit on the map", body: "Green pins are ready to pick, blue ones have already been picked, and red ones are past their best. Use the filter buttons along the top to narrow things down by fruit type, status, or distance from you. A gold glow means that fruit is in season right now." },
+  { emoji: "🌳", title: "Report a tree", body: "Found a tree full of fruit? Tap the plus button, drop a pin on the map, and add a photo. The built-in fruit checker can look at your photo and tell you whether the fruit looks good enough to eat." },
+  { emoji: "🧺", title: "Log your pickup", body: "Rescued some fruit? Open the tree and record how many kilograms you collected, along with where it went, whether that is eaten fresh, animal feed, juice, baking, or donated. That is what builds our community total." },
+  { emoji: "🏆", title: "Earn badges and climb the rankings", body: "Every kilogram counts towards your badges and the Warwickshire leaderboard. Use the bell for updates on your trees, the megaphone for news, and the calendar to see what is in season. Time to rescue some fruit." }
 ];
 let tourIndex = 0;
 
@@ -72,7 +72,7 @@ function renderTourSlide() {
   document.getElementById("tourBody").textContent = s.body;
   document.getElementById("tourDots").innerHTML = TOUR_SLIDES.map((_, i) => `<div class="tour-dot${i === tourIndex ? " active" : ""}"></div>`).join("");
   document.getElementById("tourBack").style.visibility = tourIndex === 0 ? "hidden" : "visible";
-  document.getElementById("tourNext").textContent = tourIndex === TOUR_SLIDES.length - 1 ? "Let's go! 🌿" : "Next →";
+  document.getElementById("tourNext").textContent = tourIndex === TOUR_SLIDES.length - 1 ? "Get started" : "Next";
 }
 
 function endTour() {
@@ -151,6 +151,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   checkResetToken();
 
   document.getElementById("leaderboardSearch").addEventListener("input", (e) => renderLeaderboard(e.target.value.trim()));
+  document.querySelectorAll("[data-period]").forEach(tab => {
+    tab.addEventListener("click", async () => {
+      document.querySelectorAll("[data-period]").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      leaderboardPeriod = tab.dataset.period;
+      await loadLeaderboard();
+    });
+  });
   document.getElementById("myTreesSearch").addEventListener("input", renderMyTrees);
   document.getElementById("myTreesSort").addEventListener("change", renderMyTrees);
   document.getElementById("notifsBtn").addEventListener("click", openNotifsPanel);
@@ -162,6 +170,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     else endTour();
   });
   document.getElementById("replayTourBtn").addEventListener("click", () => { closePanel("profilePanel"); startTour(true); });
+  document.getElementById("shareStatsBtn").addEventListener("click", openShareCard);
+  document.getElementById("shareCardShareBtn").addEventListener("click", shareShareCard);
+  document.getElementById("shareCardDownloadBtn").addEventListener("click", downloadShareCard);
   document.getElementById("treeType").addEventListener("change", updateSeasonHint);
   loadCommunityImpact();
 
@@ -799,7 +810,10 @@ function updateProfilePanel() {
     "apple-saver":["🍎","Apple Saver"],
     "animal-hero":["🐾","Animal Hero"],
     "windfall-legend":["👑","Windfall Legend"],
-    "gleaner":["🧺","Gleaner"]
+    "gleaner":["🧺","Gleaner"],
+    "all-rounder":["🍇","All-Rounder"],
+    "night-owl":["🦉","Night Owl"],
+    "season-opener":["🌅","Season Opener"]
   };
   const bc = document.getElementById("badgesContainer");
   const badges = currentUser.badges || [];
@@ -812,28 +826,40 @@ function setupLeaderboardBtn() {
   document.getElementById("leaderboardBtn").addEventListener("click", openLeaderboard);
 }
 
+let leaderboardPeriod = "all";
+
 async function openLeaderboard() {
+  leaderboardPeriod = "all";
+  document.getElementById("lbTabAll").classList.add("active");
+  document.getElementById("lbTabSeason").classList.remove("active");
+  await loadLeaderboard();
+  openPanel("leaderboardPanel");
+}
+
+async function loadLeaderboard() {
   try {
-    const res = await fetch("/api/leaderboard");
+    const res = await fetch(`/api/leaderboard${leaderboardPeriod === "season" ? "?period=season" : ""}`);
     const data = await res.json();
-    lastLeaderboardUsers = { users: data.users, totalKg: data.totalKg };
+    lastLeaderboardUsers = { users: data.users, totalKg: data.totalKg, period: data.period, seasonLabel: data.seasonLabel };
     document.getElementById("leaderboardSearch").value = "";
     renderLeaderboard("");
-    openPanel("leaderboardPanel");
   } catch { showToast("Could not load rankings"); }
 }
 
 function renderLeaderboard(filter) {
   if (!lastLeaderboardUsers) return;
-  const { users, totalKg } = lastLeaderboardUsers;
+  const { users, totalKg, period, seasonLabel } = lastLeaderboardUsers;
+  const isSeason = period === "season";
   const medals = ["gold","silver","bronze"];
   const q = (filter || "").toLowerCase();
   // Keep original ranks (and medals) even when the list is filtered
   const visible = users.map((u, i) => ({ u, i })).filter(({ u }) => !q || u.name.toLowerCase().includes(q));
 
-  // Community impact: where the rescued fruit actually went
+  // Community impact: where the rescued fruit actually went (season-filtered when viewing the season board)
+  const seasonStart = new Date(new Date().getFullYear(), 0, 1).getTime();
   const destTotals = {};
   allTrees.forEach(t => (t.pickups || []).forEach(p => {
+    if (isSeason && (p.at || 0) < seasonStart) return;
     const d = p.destination || "eaten";
     destTotals[d] = (destTotals[d] || 0) + (p.kg || 0);
   }));
@@ -846,11 +872,11 @@ function renderLeaderboard(filter) {
   document.getElementById("leaderboardList").innerHTML = `
     <div style="background:rgba(74,124,63,0.15);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center;margin-bottom:8px;">
       <div style="font-family:'Fraunces',serif;font-size:2rem;font-weight:900;color:var(--green-light);">${(totalKg||0).toFixed(1)}kg</div>
-      <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">total fruit rescued by Warwickshire community 🍎</div>
+      <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">${isSeason ? `rescued by the community in ${esc(seasonLabel || "")} 🍎` : "total fruit rescued by Warwickshire community 🍎"}</div>
       ${destChips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:12px;">${destChips}</div>` : ""}
     </div>
     ${visible.length === 0
-      ? `<p style="color:var(--text-muted);text-align:center">${q ? "No rescuers match that search 🔍" : "No rescuers yet — be first! 🍎"}</p>`
+      ? `<p style="color:var(--text-muted);text-align:center">${q ? "No rescuers match that search 🔍" : (isSeason ? "No pickups logged this season yet. Be the first!" : "No rescuers yet — be first! 🍎")}</p>`
       : visible.map(({ u, i }) => `
         <div class="leader-row">
           <div class="leader-rank ${medals[i]||""}">${i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div>
@@ -1418,7 +1444,7 @@ async function openUserProfile(userId) {
     const res = await apiFetch(`/api/users/${userId}/profile`);
     if (!res.ok) { showToast("Could not load profile"); return; }
     const u = await res.json();
-    const badgeMap = { "developer":["⚙️","Developer"],"admin":["👑","Admin"],"tree-scout":["🌱","Tree Scout"],"orchard-mapper":["🗺️","Orchard Mapper"],"apple-saver":["🍎","Apple Saver"],"animal-hero":["🐾","Animal Hero"],"windfall-legend":["👑","Windfall Legend"],"gleaner":["🧺","Gleaner"] };
+    const badgeMap = { "developer":["⚙️","Developer"],"admin":["👑","Admin"],"tree-scout":["🌱","Tree Scout"],"orchard-mapper":["🗺️","Orchard Mapper"],"apple-saver":["🍎","Apple Saver"],"animal-hero":["🐾","Animal Hero"],"windfall-legend":["👑","Windfall Legend"],"gleaner":["🧺","Gleaner"],"all-rounder":["🍇","All-Rounder"],"night-owl":["🦉","Night Owl"],"season-opener":["🌅","Season Opener"] };
     const treesAdded = allTrees.filter(t => t.reportedBy === userId);
     const badgesHtml = (u.badges || []).length === 0
       ? `<p style="font-size:0.85rem;color:var(--text-muted)">No badges yet</p>`
@@ -1651,7 +1677,7 @@ function drawYearCard(logoImg) {
 
   // URL footer
   ctx.font = "22px sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.2)";
-  ctx.fillText("windfall-jvc3.onrender.com", 72, 608);
+  ctx.fillText("windfall-app.co.uk", 72, 608);
 
   // Community badge (top right)
   ctx.fillStyle = "rgba(74,124,63,0.22)";
@@ -1684,6 +1710,97 @@ function downloadYearCard() {
   showToast("🎴 Year card saved!");
 }
 window.downloadYearCard = downloadYearCard;
+
+// ==================== PERSONAL SHARE CARD ====================
+async function openShareCard() {
+  if (!currentUser) return;
+  document.getElementById("shareCardPanel").style.display = "flex";
+  const logoImg = await new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = "/icon-192.png";
+  });
+  drawShareCard(logoImg);
+}
+
+function drawShareCard(logoImg) {
+  const name = currentUser.name || "A rescuer";
+  const kg = (currentUser.kgRescued || 0).toFixed(1);
+  const trees = allTrees.filter(t => t.reportedBy === currentUser.id).length;
+  const pickups = currentUser.pickups || 0;
+  const badgeCount = (currentUser.badges || []).length;
+
+  const canvas = document.getElementById("shareCardCanvas");
+  canvas.width = 1080; canvas.height = 1080;
+  const ctx = canvas.getContext("2d");
+
+  const bg = ctx.createLinearGradient(0, 0, 1080, 1080);
+  bg.addColorStop(0, "#060f06"); bg.addColorStop(1, "#122112");
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, 1080, 1080);
+  [[1000, 60, 300, "rgba(74,124,63,0.16)"], [80, 1000, 260, "rgba(74,124,63,0.12)"]].forEach(([x, y, r, c]) => {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill();
+  });
+
+  ctx.textAlign = "center";
+  if (logoImg) ctx.drawImage(logoImg, 490, 90, 100, 100);
+  ctx.font = "bold 52px Georgia, serif"; ctx.fillStyle = "#e8f0e6";
+  ctx.fillText("Windfall", 540, 250);
+  ctx.font = "24px sans-serif"; ctx.fillStyle = "#7cb87c";
+  ctx.fillText("Warwickshire Community Apple Rescue", 540, 292);
+
+  ctx.font = "28px sans-serif"; ctx.fillStyle = "#c8e6c9";
+  ctx.fillText("I have rescued", 540, 420);
+  ctx.font = "bold 210px Georgia, serif"; ctx.fillStyle = "#4a7c3f";
+  ctx.fillText(kg, 540, 640);
+  ctx.font = "bold 46px sans-serif"; ctx.fillStyle = "#a5d6a7";
+  ctx.fillText("kilograms of fruit", 540, 710);
+
+  // Stat row
+  const stats = [[trees, "trees mapped"], [pickups, "pickups"], [badgeCount, "badges"]];
+  const boxW = 250, gap = 30, startX = 540 - (boxW * 3 + gap * 2) / 2;
+  stats.forEach(([val, lbl], i) => {
+    const x = startX + i * (boxW + gap);
+    ctx.fillStyle = "rgba(74,124,63,0.22)";
+    rrect(ctx, x, 790, boxW, 130, 18); ctx.fill();
+    ctx.strokeStyle = "rgba(74,124,63,0.5)"; ctx.lineWidth = 1.5;
+    rrect(ctx, x, 790, boxW, 130, 18); ctx.stroke();
+    ctx.font = "bold 56px Georgia, serif"; ctx.fillStyle = "#e8f0e6";
+    ctx.fillText(String(val), x + boxW / 2, 858);
+    ctx.font = "22px sans-serif"; ctx.fillStyle = "#8aab85";
+    ctx.fillText(lbl, x + boxW / 2, 895);
+  });
+
+  ctx.font = "26px sans-serif"; ctx.fillStyle = "#c8e6c9";
+  ctx.fillText(name, 540, 985);
+  ctx.font = "22px sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.28)";
+  ctx.fillText("windfall-app.co.uk", 540, 1030);
+  ctx.textAlign = "left";
+}
+
+async function shareShareCard() {
+  const canvas = document.getElementById("shareCardCanvas");
+  const text = `I've rescued ${(currentUser.kgRescued || 0).toFixed(1)}kg of fruit with Windfall! Join me at windfall-app.co.uk`;
+  try {
+    const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
+    const file = new File([blob], "windfall-stats.png", { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], text });
+      return;
+    }
+    if (navigator.share) { await navigator.share({ text, url: "https://windfall-app.co.uk" }); return; }
+    downloadShareCard();
+  } catch (e) { if (e.name !== "AbortError") downloadShareCard(); }
+}
+
+function downloadShareCard() {
+  const canvas = document.getElementById("shareCardCanvas");
+  const a = document.createElement("a");
+  a.download = "windfall-stats.png";
+  a.href = canvas.toDataURL("image/png");
+  a.click();
+  showToast("📸 Stats card saved!");
+}
 
 // ==================== HELPERS ====================
 async function apiFetch(url, opts = {}) {

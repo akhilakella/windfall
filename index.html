@@ -280,6 +280,7 @@
       <button id="changePassBtn" class="btn-secondary" style="margin-top:8px;">🔑 Update Password</button>
       <div id="changePassMsg" class="hidden" style="font-size:0.82rem;margin-top:6px;padding:8px 12px;border-radius:8px;"></div>
     </div>
+    <button id="shareStatsBtn" class="btn-primary">📸 Share my stats</button>
     <button id="replayTourBtn" class="btn-secondary">🎓 Replay app tour</button>
     <button id="logoutBtn" class="btn-danger">Sign Out</button>
   </div>
@@ -289,6 +290,10 @@
 <div id="leaderboardPanel" class="panel">
   <div class="panel-header"><h2><img src="/icon.svg" alt="" style="height:22px;width:22px;object-fit:contain;vertical-align:middle;margin-right:5px;" />Warwickshire Rankings</h2><button class="panel-close" id="closeLeaderboard">✕</button></div>
   <div class="panel-body">
+    <div class="auth-tabs" style="margin-bottom:12px;">
+      <button class="auth-tab active" id="lbTabAll" data-period="all">All time</button>
+      <button class="auth-tab" id="lbTabSeason" data-period="season">This season</button>
+    </div>
     <div class="field-group"><input type="search" id="leaderboardSearch" placeholder="🔍 Search rescuers by name..." autocomplete="off" /></div>
     <div id="leaderboardList" class="leaderboard-list"></div>
   </div>
@@ -467,8 +472,8 @@
     <p class="tour-body" id="tourBody"></p>
     <div class="tour-dots" id="tourDots"></div>
     <div class="tour-actions">
-      <button class="btn-secondary btn-sm" id="tourBack">← Back</button>
-      <button class="btn-primary btn-sm" id="tourNext">Next →</button>
+      <button class="btn-secondary btn-sm" id="tourBack">Back</button>
+      <button class="btn-primary btn-sm" id="tourNext">Next</button>
     </div>
   </div>
 </div>
@@ -478,6 +483,16 @@
   <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
     <button onclick="downloadYearCard()" class="btn-primary">⬇️ Download PNG</button>
     <button onclick="document.getElementById('yearCardPanel').style.display='none'" class="btn-secondary">✕ Close</button>
+  </div>
+</div>
+
+<!-- Personal share card -->
+<div id="shareCardPanel" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px;overflow-y:auto;">
+  <canvas id="shareCardCanvas" style="max-width:100%;max-height:62vh;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,0.7);display:block;"></canvas>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+    <button id="shareCardShareBtn" class="btn-primary">📤 Share</button>
+    <button id="shareCardDownloadBtn" class="btn-secondary">⬇️ Download PNG</button>
+    <button onclick="document.getElementById('shareCardPanel').style.display='none'" class="btn-secondary">✕ Close</button>
   </div>
 </div>
 

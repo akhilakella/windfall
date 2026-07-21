@@ -96,11 +96,14 @@ const FEATURES = [
 
   ["Leaderboard / rankings",          [R.route("/api/leaderboard"), R.fn("openLeaderboard"), R.fn("renderLeaderboard")]],
   ["Leaderboard search",              [R.id("leaderboardSearch")]],
+  ["This-season leaderboard",         [R.app("leaderboardPeriod"), R.fn("loadLeaderboard"), R.id("lbTabSeason"), R.id("lbTabAll"), R.srv("req.query.period")]],
   ["Community impact breakdown",      [R.app("destTotals")]],
   ["My Trees list",                   [R.fn("openMyTrees"), R.fn("renderMyTrees"), R.id("myTreesList")]],
   ["My Trees search + sort",          [R.id("myTreesSearch"), R.id("myTreesSort")]],
   ["Profile + stats",                 [R.route("/api/me"), R.fn("updateProfilePanel"), R.id("statKg")]],
   ["Badges",                          [R.srvfn("computeBadges"), R.app("badgeMap"), R.srv("windfall-legend")]],
+  ["Bonus badges (all-rounder/night-owl/season-opener)", [R.srv("all-rounder"), R.srv("night-owl"), R.srv("season-opener"), R.app("all-rounder"), R.srv("pickedTypes"), R.srv("nightOwl")]],
+  ["Personal share card",             [R.fn("openShareCard"), R.fn("drawShareCard"), R.fn("shareShareCard"), R.fn("downloadShareCard"), R.id("shareStatsBtn"), R.id("shareCardCanvas")]],
   ["Public user profiles",            [R.route("/api/users/:id/profile"), R.fn("openUserProfile")]],
 
   ["Community impact counter (sign-in)", [R.fn("loadCommunityImpact"), R.id("communityImpact"), R.css("community-impact")]],
