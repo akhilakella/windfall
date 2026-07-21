@@ -45,6 +45,41 @@ function captureUserPos() {
   );
 }
 
+// ==================== ONBOARDING TOUR ====================
+// Shown once per device. Existing users have never had the flag set, so they
+// get it the first time they open the app after this update, then never again.
+const TOUR_SLIDES = [
+  { emoji: "🍎", title: "Welcome to Windfall!", body: "Every autumn, tonnes of fruit fall from trees around Warwickshire and rot on the ground. Windfall maps those trees so the community can rescue the fruit instead. Here's a quick tour!" },
+  { emoji: "🗺️", title: "Find fruit on the map", body: "Green pins are ready to pick, blue are already picked, red are past their best. Use the filter pills at the top to narrow by fruit type, status, or how far away it is. A gold glow means it's in season right now!" },
+  { emoji: "➕", title: "Report a tree", body: "Spotted a tree loaded with fruit? Tap the ＋ button, drop a pin on the map, and add a photo. The AI Fruit Checker can even look at your photo and tell you whether the fruit looks good enough to eat." },
+  { emoji: "🧺", title: "Log your pickup", body: "Rescued some fruit? Open the tree and log how many kg you collected, plus where it went — eaten fresh, animal feed, juice, baking, or donated. That's what builds our community total." },
+  { emoji: "🏆", title: "Earn badges & climb the rankings", body: "Every kilo counts towards your badges and the Warwickshire leaderboard. Tap 🔔 for updates on your trees, 📢 for news, and 🗓️ to see what's in season. Let's rescue some fruit!" }
+];
+let tourIndex = 0;
+
+function startTour(force) {
+  if (!force && localStorage.getItem("wf_seenTour")) return;
+  tourIndex = 0;
+  renderTourSlide();
+  document.getElementById("tourOverlay").style.display = "flex";
+}
+window.startTour = startTour;
+
+function renderTourSlide() {
+  const s = TOUR_SLIDES[tourIndex];
+  document.getElementById("tourEmoji").textContent = s.emoji;
+  document.getElementById("tourTitle").textContent = s.title;
+  document.getElementById("tourBody").textContent = s.body;
+  document.getElementById("tourDots").innerHTML = TOUR_SLIDES.map((_, i) => `<div class="tour-dot${i === tourIndex ? " active" : ""}"></div>`).join("");
+  document.getElementById("tourBack").style.visibility = tourIndex === 0 ? "hidden" : "visible";
+  document.getElementById("tourNext").textContent = tourIndex === TOUR_SLIDES.length - 1 ? "Let's go! 🌿" : "Next →";
+}
+
+function endTour() {
+  localStorage.setItem("wf_seenTour", "1");
+  document.getElementById("tourOverlay").style.display = "none";
+}
+
 // ==================== HARVEST SEASONS ====================
 // Typical UK ripeness windows (months are 1-12, inclusive)
 const FRUIT_SEASONS = {
@@ -120,6 +155,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("myTreesSort").addEventListener("change", renderMyTrees);
   document.getElementById("notifsBtn").addEventListener("click", openNotifsPanel);
   document.getElementById("seasonsBtn").addEventListener("click", openSeasonsPanel);
+  document.getElementById("tourSkip").addEventListener("click", endTour);
+  document.getElementById("tourBack").addEventListener("click", () => { if (tourIndex > 0) { tourIndex--; renderTourSlide(); } });
+  document.getElementById("tourNext").addEventListener("click", () => {
+    if (tourIndex < TOUR_SLIDES.length - 1) { tourIndex++; renderTourSlide(); }
+    else endTour();
+  });
+  document.getElementById("replayTourBtn").addEventListener("click", () => { closePanel("profilePanel"); startTour(true); });
   document.getElementById("treeType").addEventListener("change", updateSeasonHint);
   loadCommunityImpact();
 
@@ -394,6 +436,7 @@ async function showApp() {
   updateProfilePanel();
   captureUserPos();
   checkAnnouncementsDot();
+  startTour();
 
   if (!maintenancePollStarted) {
     maintenancePollStarted = true;

@@ -1142,6 +1142,75 @@ option { background: var(--green-dark); }
   to   { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
+/* ==================== ONBOARDING TOUR ==================== */
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  background: rgba(6,12,6,0.82);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: wfFadeIn 0.2s ease;
+}
+.tour-card {
+  position: relative;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 30px 24px 22px;
+  max-width: 360px;
+  width: 100%;
+  text-align: center;
+}
+.tour-skip {
+  position: absolute;
+  top: 12px; right: 14px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: 'DM Sans', sans-serif;
+}
+.tour-skip:hover { color: var(--text-sub); }
+.tour-emoji { font-size: 2.8rem; line-height: 1; margin-bottom: 10px; }
+.tour-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1.25rem;
+  color: var(--gold);
+  margin-bottom: 10px;
+}
+.tour-body {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--text-sub);
+  margin-bottom: 18px;
+}
+.tour-dots {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+.tour-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.18);
+  transition: all 0.25s;
+}
+.tour-dot.active {
+  background: var(--green-light);
+  width: 20px;
+  border-radius: 100px;
+}
+.tour-actions { display: flex; gap: 10px; }
+.tour-actions button { flex: 1; }
+
 /* ==================== CONFIRM DIALOG ==================== */
 .confirm-overlay {
   position: fixed;
