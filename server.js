@@ -666,11 +666,11 @@ async function emailBackup() {
   });
 }
 
-// Weekly automatic backup (runs on the first wake-up once 7 days have passed)
+// Daily automatic backup (runs on the first wake-up once 24 hours have passed)
 async function sendBackupIfDue() {
   try {
     const last = parseInt(await redis.get("backup:lastSent") || "0", 10);
-    if (Date.now() - last < 7 * 24 * 3600 * 1000) return;
+    if (Date.now() - last < 24 * 3600 * 1000) return;
     await redis.set("backup:lastSent", String(Date.now())); // claim first so we never double-send
     const ok = await emailBackup();
     console.log(ok ? "Weekly backup emailed" : "Weekly backup failed to send");
