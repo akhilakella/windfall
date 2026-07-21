@@ -1096,6 +1096,16 @@ function setupAdminTabs() {
     finally { setLoading("sendDigestBtn", false, "📧 Email me this week's digest"); }
   });
 
+  document.getElementById("sendBackupBtn").addEventListener("click", async () => {
+    setLoading("sendBackupBtn", true, "🗄️ Email me a backup now");
+    try {
+      const res = await apiFetch("/api/admin/send-backup", { method: "POST" });
+      if (res.ok) showToast("🗄️ Backup emailed — check your inbox!");
+      else { const d = await res.json().catch(() => ({})); showToast(d.error || "Failed to send backup"); }
+    } catch { showToast("Error sending backup"); }
+    finally { setLoading("sendBackupBtn", false, "🗄️ Email me a backup now"); }
+  });
+
   document.getElementById("toggleMaintenanceBtn").addEventListener("click", async () => {
     const btn = document.getElementById("toggleMaintenanceBtn");
     const enabling = btn.dataset.enabled !== "1";

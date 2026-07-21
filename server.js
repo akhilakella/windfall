@@ -84,16 +84,20 @@ function welcomeEmailHtml(name, appUrl) {
 }
 
 // Send an email via Resend. Returns silently if no API key is configured.
-async function sendEmail({ to, subject, html }) {
-  if (!process.env.RESEND_API_KEY) { console.error("RESEND_API_KEY not set — email skipped"); return; }
+// `attachments` (optional): [{ filename, content }] where content is base64.
+async function sendEmail({ to, subject, html, attachments }) {
+  if (!process.env.RESEND_API_KEY) { console.error("RESEND_API_KEY not set — email skipped"); return false; }
   try {
+    const payload = { from: process.env.EMAIL_FROM || "Windfall <onboarding@resend.dev>", to, subject, html };
+    if (attachments && attachments.length) payload.attachments = attachments;
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.RESEND_API_KEY}` },
-      body: JSON.stringify({ from: process.env.EMAIL_FROM || "Windfall <onboarding@resend.dev>", to, subject, html })
+      body: JSON.stringify(payload)
     });
-    if (!r.ok) console.error("Email send failed:", await r.text());
-  } catch (e) { console.error("Email send error:", e.message); }
+    if (!r.ok) { console.error("Email send failed:", await r.text()); return false; }
+    return true;
+  } catch (e) { console.error("Email send error:", e.message); return false; }
 }
 
 // ---- REGISTER ----
@@ -606,6 +610,82 @@ app.post("/api/admin/send-digest", authMiddleware, adminMiddleware, async (req, 
     });
     res.json({ success: true });
   } catch (err) { console.error("Manual digest error:", err); res.status(500).json({ error: "Server error" }); }
+});
+
+// ---- AUTOMATED OFF-SITE BACKUP ----
+// Dumps every user + tree to a JSON file and emails it to the admin, so the
+// data survives even if the Redis database is ever wiped. Photos (large base64
+// blobs) are stripped to keep the email well under Resend's size limit — the
+// critical data (accounts, tree locations, pickups, comments, stats) is kept.
+async function buildBackup() {
+  const users = [], trees = [];
+  const userKeys = await redis.keys("user:*");
+  for (const key of userKeys) {
+    if (key.includes("email")) continue;
+    if (!key.startsWith("user:")) continue;
+    const u = JSON.parse(await redis.get(key));
+    if (u) users.push(u);
+  }
+  const treeKeys = await redis.keys("tree:*");
+  for (const key of treeKeys) {
+    const parts = key.split(":");
+    if (parts.length !== 2) continue;
+    const t = JSON.parse(await redis.get(key));
+    if (!t) continue;
+    trees.push({ ...t, photo: t.photo ? "[photo omitted from backup]" : null });
+  }
+  const announcementsRaw = await redis.get("announcements");
+  return {
+    exportedAt: new Date().toISOString(),
+    counts: { users: users.length, trees: trees.length },
+    users, trees,
+    announcements: announcementsRaw ? JSON.parse(announcementsRaw) : []
+  };
+}
+
+async function emailBackup() {
+  const backup = await buildBackup();
+  const json = JSON.stringify(backup, null, 2);
+  const base64 = Buffer.from(json, "utf8").toString("base64");
+  const stamp = new Date().toISOString().slice(0, 10);
+  const sizeKb = Math.round(base64.length / 1024);
+  const html = `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0f1a0e;color:#e8f0e6;border-radius:16px;">
+    <h1 style="color:#d4a843;">🍎 Windfall backup</h1>
+    <p>Attached is a full backup of your Windfall data as of ${esc(backup.exportedAt)}.</p>
+    <div style="background:rgba(74,124,63,0.15);border:1px solid rgba(74,124,63,0.4);border-radius:10px;padding:16px;margin:16px 0;">
+      <p style="margin:0 0 6px;"><strong>${backup.counts.users}</strong> users</p>
+      <p style="margin:0;"><strong>${backup.counts.trees}</strong> trees</p>
+    </div>
+    <p style="font-size:0.85rem;color:#8aab85;">Keep this email safe. If the database is ever lost, this file can restore everything (photos are not included to keep the backup small).</p>
+  </div>`;
+  return await sendEmail({
+    to: ADMIN_EMAIL,
+    subject: `🗄️ Windfall backup — ${stamp} (${backup.counts.users} users, ${backup.counts.trees} trees, ${sizeKb}KB)`,
+    html,
+    attachments: [{ filename: `windfall-backup-${stamp}.json`, content: base64 }]
+  });
+}
+
+// Weekly automatic backup (runs on the first wake-up once 7 days have passed)
+async function sendBackupIfDue() {
+  try {
+    const last = parseInt(await redis.get("backup:lastSent") || "0", 10);
+    if (Date.now() - last < 7 * 24 * 3600 * 1000) return;
+    await redis.set("backup:lastSent", String(Date.now())); // claim first so we never double-send
+    const ok = await emailBackup();
+    console.log(ok ? "Weekly backup emailed" : "Weekly backup failed to send");
+  } catch (e) { console.error("Backup error:", e.message); }
+}
+setInterval(sendBackupIfDue, 60 * 60 * 1000);
+setTimeout(sendBackupIfDue, 30000);
+
+// Manual trigger so the admin can grab a backup / test it on demand
+app.post("/api/admin/send-backup", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const ok = await emailBackup();
+    if (ok) { await redis.set("backup:lastSent", String(Date.now())); res.json({ success: true }); }
+    else res.status(500).json({ error: "Backup email failed — check server logs" });
+  } catch (err) { console.error("Manual backup error:", err); res.status(500).json({ error: "Server error" }); }
 });
 
 // ---- LEADERBOARD ----
