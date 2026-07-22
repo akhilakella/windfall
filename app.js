@@ -83,10 +83,11 @@ function endTour() {
 // ==================== HARVEST SEASONS ====================
 // Typical UK ripeness windows (months are 1-12, inclusive)
 const FRUIT_SEASONS = {
-  apple:  { from: 9, to: 10, label: "September–October" },
-  pear:   { from: 9, to: 10, label: "September–October" },
-  plum:   { from: 8, to: 9,  label: "August–September" },
-  cherry: { from: 7, to: 8,  label: "July–August" }
+  apple:      { from: 9, to: 10, label: "September to October" },
+  pear:       { from: 9, to: 10, label: "September to October" },
+  plum:       { from: 8, to: 9,  label: "August to September" },
+  cherry:     { from: 7, to: 8,  label: "July to August" },
+  blackberry: { from: 8, to: 9,  label: "August to September" }
 };
 
 function inSeason(type) {
@@ -100,10 +101,11 @@ function openSeasonsPanel() {
   const monthNames = ["J","F","M","A","M","J","J","A","S","O","N","D"];
   const nowM = new Date().getMonth() + 1;
   const fruits = [
-    { type: "cherry", emoji: "🍒", name: "Cherry" },
-    { type: "plum",   emoji: "🟣", name: "Plum" },
-    { type: "apple",  emoji: "🍎", name: "Apple" },
-    { type: "pear",   emoji: "🍐", name: "Pear" }
+    { type: "cherry",     emoji: "🍒", name: "Cherry" },
+    { type: "plum",       emoji: "🟣", name: "Plum" },
+    { type: "blackberry", emoji: "🫐", name: "Blackberry" },
+    { type: "apple",      emoji: "🍎", name: "Apple" },
+    { type: "pear",       emoji: "🍐", name: "Pear" }
   ];
   document.getElementById("seasonsList").innerHTML = fruits.map(f => {
     const s = FRUIT_SEASONS[f.type];
@@ -496,7 +498,7 @@ function placeTempMarker(lat, lng) {
 }
 
 function getStatusColor(s) { return s === "active" ? "#4CAF50" : s === "picked" ? "#3498db" : "#e74c3c"; }
-function getFruitEmoji(t) { return ({ apple:"🍎", pear:"🍐", plum:"🟣", cherry:"🍒", other:"🌳" })[t] || "🌳"; }
+function getFruitEmoji(t) { return ({ apple:"🍎", pear:"🍐", plum:"🟣", cherry:"🍒", blackberry:"🫐", other:"🌳" })[t] || "🌳"; }
 
 function addTreeMarker(tree) {
   if (markers[tree.id]) map.removeLayer(markers[tree.id]);

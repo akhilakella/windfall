@@ -248,7 +248,7 @@ app.patch("/api/trees/:id/pickup", authMiddleware, async (req, res) => {
     user.kgRescued = (user.kgRescued || 0) + kgNum;
     user.pickups = (user.pickups || 0) + 1;
     // Track distinct fruit types picked (for the all-rounder badge)
-    if (["apple", "pear", "plum", "cherry"].includes(tree.type)) {
+    if (["apple", "pear", "plum", "cherry", "blackberry"].includes(tree.type)) {
       user.pickedTypes = Array.from(new Set([...(user.pickedTypes || []), tree.type]));
     }
     // Night owl: a pickup logged between 9pm and 5am
@@ -747,7 +747,7 @@ function computeBadges(user) {
   if (user.kgRescued >= 200) badges.push("windfall-legend");
   if (user.pickups >= 5) badges.push("gleaner");
   const picked = user.pickedTypes || [];
-  if (["apple", "pear", "plum", "cherry"].every(t => picked.includes(t))) badges.push("all-rounder");
+  if (["apple", "pear", "plum", "cherry", "blackberry"].every(t => picked.includes(t))) badges.push("all-rounder");
   if (user.nightOwl) badges.push("night-owl");
   if (user.seasonOpener) badges.push("season-opener");
   return badges;

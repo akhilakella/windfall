@@ -89,6 +89,7 @@ const FEATURES = [
   ["Shared /tree/:id deep link",      [R.app("pendingTreeId"), R.app("/^\\/tree\\/")]],
 
   ["Filter by fruit type",            [R.app("activeTypeFilter"), R.html('data-filter-type="apple"')]],
+  ["Blackberry fruit type (everywhere)", [R.app("blackberry:"), R.html('data-filter-type="blackberry"'), R.html('value="blackberry"'), R.srv('"blackberry"'), R.app('type: "blackberry"')]],
   ["Filter by status",                [R.app("activeStatusFilter"), R.html('data-filter-status="active"')]],
   ["Filter by distance (1/5/10/custom)", [R.app("activeDistFilter"), R.id("customDistInput"), R.html('data-filter-dist="1"'), R.html('data-filter-dist="custom"')]],
   ["Distance-from-me labels",         [R.fn("distanceKm"), R.fn("distanceLabel"), R.fn("captureUserPos")]],
