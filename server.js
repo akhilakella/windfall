@@ -24,6 +24,8 @@ redis.on("connect", () => console.log("Redis connected"));
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.static(path.join(__dirname)));
+// Render sits behind a proxy, so trust it to read the real client IP
+app.set("trust proxy", 1);
 
 // Photos are stored as base64 data URLs inside the tree record in Redis —
 // Render's disk is ephemeral, so files written to it vanish on every deploy.
@@ -40,6 +42,32 @@ function authMiddleware(req, res, next) {
 function adminMiddleware(req, res, next) {
   if (req.user.email !== ADMIN_EMAIL) return res.status(403).json({ error: "Admin only" });
   next();
+}
+
+// ---- RATE LIMITING ----
+// Counts requests per key in Redis with an auto-expiring window. Protects
+// against brute-forced logins, signup spam, and abuse of the AI checker.
+// Fails open: if Redis has a wobble, requests are allowed through rather
+// than locking real users out.
+async function underLimit(key, max, windowSec) {
+  try {
+    const k = `rl:${key}`;
+    const count = await redis.incr(k);
+    if (count === 1) await redis.expire(k, windowSec);
+    return count <= max;
+  } catch { return true; }
+}
+
+function rateLimit({ max, windowSec, scope, by = "ip", message }) {
+  return async (req, res, next) => {
+    const who = by === "user" && req.user ? `u:${req.user.id}` : `ip:${req.ip || "unknown"}`;
+    const ok = await underLimit(`${scope}:${who}`, max, windowSec);
+    if (!ok) {
+      console.warn(`Rate limit hit: ${scope} by ${who}`);
+      return res.status(429).json({ error: message || "Too many requests. Please wait a little and try again." });
+    }
+    next();
+  };
 }
 
 // Escape user-supplied text before embedding it in email HTML
@@ -83,6 +111,47 @@ function welcomeEmailHtml(name, appUrl) {
   </div>`;
 }
 
+// Email sent to a tree's reporter when someone else picks from or comments on it.
+function treeActivityEmailHtml({ ownerName, headline, detail, appUrl, treeId }) {
+  const first = esc((ownerName || "").split(" ")[0] || "there");
+  return `
+  <div style="margin:0;padding:0;background:#0f1a0e;">
+    <div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:36px 30px;background:#111d10;border-radius:18px;color:#e8f0e6;">
+      <div style="text-align:center;">
+        <img src="${appUrl}/icon-192.png" alt="Windfall" width="64" height="64" style="width:64px;height:64px;object-fit:contain;" />
+        <div style="font-size:1.3rem;font-weight:800;letter-spacing:5px;margin:8px 0 2px;">WINDFALL</div>
+        <div style="height:3px;width:56px;background:linear-gradient(90deg,#7db874,#d4a843);margin:14px auto 22px;border-radius:2px;"></div>
+      </div>
+      <p style="font-size:0.95rem;color:#c9d8c4;margin:0 0 14px;">Hi ${first},</p>
+      <h2 style="font-size:1.1rem;color:#d4a843;margin:0 0 12px;">${esc(headline)}</h2>
+      ${detail ? `<div style="background:rgba(74,124,63,0.15);border:1px solid rgba(74,124,63,0.4);border-radius:10px;padding:14px;margin:0 0 18px;font-size:0.9rem;color:#c9d8c4;">${esc(detail)}</div>` : ""}
+      <div style="text-align:center;margin-top:20px;">
+        <a href="${appUrl}/tree/${esc(treeId)}" style="display:inline-block;background:#4a7c3f;color:#ffffff;padding:13px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:0.95rem;">View the tree</a>
+      </div>
+      <p style="font-size:0.75rem;color:#556b52;margin:26px 0 0;text-align:center;line-height:1.6;">
+        You are getting this because you reported this tree. You can turn these emails off in your profile.
+      </p>
+    </div>
+  </div>`;
+}
+
+// Fire-and-forget notification to the person who reported a tree.
+async function notifyTreeOwner(tree, actorId, { subject, headline, detail }) {
+  try {
+    if (!tree || !tree.reportedBy || tree.reportedBy === actorId) return;
+    const raw = await redis.get(`user:${tree.reportedBy}`);
+    if (!raw) return;
+    const owner = JSON.parse(raw);
+    if (!owner.email || owner.emailNotifications === false) return;
+    const appUrl = process.env.APP_URL || "https://windfall-app.co.uk";
+    await sendEmail({
+      to: owner.email,
+      subject,
+      html: treeActivityEmailHtml({ ownerName: owner.name, headline, detail, appUrl, treeId: tree.id })
+    });
+  } catch (e) { console.error("Tree notification error:", e.message); }
+}
+
 // Send an email via Resend. Returns silently if no API key is configured.
 // `attachments` (optional): [{ filename, content }] where content is base64.
 async function sendEmail({ to, subject, html, attachments }) {
@@ -101,7 +170,7 @@ async function sendEmail({ to, subject, html, attachments }) {
 }
 
 // ---- REGISTER ----
-app.post("/api/register", async (req, res) => {
+app.post("/api/register", rateLimit({ scope: "register", max: 5, windowSec: 3600, message: "Too many sign-up attempts. Please try again in an hour." }), async (req, res) => {
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: "All fields required" });
@@ -129,7 +198,7 @@ app.post("/api/register", async (req, res) => {
 });
 
 // ---- LOGIN ----
-app.post("/api/login", async (req, res) => {
+app.post("/api/login", rateLimit({ scope: "login", max: 10, windowSec: 900, message: "Too many sign-in attempts. Please wait 15 minutes and try again." }), async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: "All fields required" });
@@ -143,7 +212,7 @@ app.post("/api/login", async (req, res) => {
     user.badges = computeBadges(user);
     await redis.set(`user:${userId}`, JSON.stringify(user));
     const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, kgRescued: user.kgRescued, treesReported: user.treesReported, pickups: user.pickups, badges: user.badges } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, kgRescued: user.kgRescued, treesReported: user.treesReported, pickups: user.pickups, badges: user.badges, emailNotifications: user.emailNotifications !== false } });
   } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
 });
 
@@ -153,7 +222,19 @@ app.get("/api/me", authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ error: "User not found" });
     user.badges = computeBadges(user);
     await redis.set(`user:${req.user.id}`, JSON.stringify(user));
-    res.json({ id: user.id, name: user.name, email: user.email, kgRescued: user.kgRescued, treesReported: user.treesReported, pickups: user.pickups, badges: user.badges });
+    res.json({ id: user.id, name: user.name, email: user.email, kgRescued: user.kgRescued, treesReported: user.treesReported, pickups: user.pickups, badges: user.badges, emailNotifications: user.emailNotifications !== false });
+  } catch (err) { res.status(500).json({ error: "Server error" }); }
+});
+
+// Let users turn tree-activity emails on or off
+app.post("/api/email-prefs", authMiddleware, async (req, res) => {
+  try {
+    const raw = await redis.get(`user:${req.user.id}`);
+    if (!raw) return res.status(404).json({ error: "User not found" });
+    const user = JSON.parse(raw);
+    user.emailNotifications = req.body.enabled !== false;
+    await redis.set(`user:${req.user.id}`, JSON.stringify(user));
+    res.json({ enabled: user.emailNotifications });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
@@ -169,7 +250,7 @@ app.post("/api/change-password", authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
-app.post("/api/forgot-password", async (req, res) => {
+app.post("/api/forgot-password", rateLimit({ scope: "forgot", max: 5, windowSec: 3600, message: "Too many reset requests. Please try again in an hour." }), async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email required" });
@@ -218,7 +299,7 @@ app.get("/api/trees", async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
-app.post("/api/trees", authMiddleware, upload.single("photo"), async (req, res) => {
+app.post("/api/trees", authMiddleware, rateLimit({ scope: "addtree", by: "user", max: 30, windowSec: 3600, message: "You have added a lot of trees in the last hour. Please try again shortly." }), upload.single("photo"), async (req, res) => {
   try {
     const { lat, lng, type, landType, notes, estimatedKg, address } = req.body;
     if (!lat || !lng || !type) return res.status(400).json({ error: "lat, lng and type required" });
@@ -263,6 +344,11 @@ app.patch("/api/trees/:id/pickup", authMiddleware, async (req, res) => {
     user.badges = computeBadges(user);
     await redis.set(`user:${req.user.id}`, JSON.stringify(user));
     res.json(tree);
+    notifyTreeOwner(tree, req.user.id, {
+      subject: `${req.user.name} rescued ${kgNum}kg from your ${tree.type} tree`,
+      headline: `${req.user.name} just rescued ${kgNum}kg of fruit from your ${tree.type} tree.`,
+      detail: "Thanks for putting it on the map. That is fruit which would otherwise have gone to waste."
+    });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
@@ -277,7 +363,7 @@ app.patch("/api/trees/:id/status", authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
-app.post("/api/trees/:id/comments", authMiddleware, async (req, res) => {
+app.post("/api/trees/:id/comments", authMiddleware, rateLimit({ scope: "comment", by: "user", max: 20, windowSec: 600, message: "You are commenting very quickly. Please wait a moment." }), async (req, res) => {
   try {
     const raw = await redis.get(`tree:${req.params.id}`);
     if (!raw) return res.status(404).json({ error: "Tree not found" });
@@ -289,6 +375,11 @@ app.post("/api/trees/:id/comments", authMiddleware, async (req, res) => {
     tree.comments.push(comment);
     await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
     res.json(comment);
+    notifyTreeOwner(tree, req.user.id, {
+      subject: `${req.user.name} commented on your ${tree.type} tree`,
+      headline: `${req.user.name} left a comment on your ${tree.type} tree.`,
+      detail: comment.text
+    });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
@@ -753,7 +844,7 @@ function computeBadges(user) {
   return badges;
 }
 
-app.post("/api/ai-check", authMiddleware, async (req, res) => {
+app.post("/api/ai-check", authMiddleware, rateLimit({ scope: "aicheck", by: "user", max: 30, windowSec: 3600, message: "You have used the fruit checker a lot in the last hour. Please try again shortly." }), async (req, res) => {
   try {
     const { imageBase64, mediaType } = req.body;
     if (!imageBase64 || !mediaType) return res.status(400).json({ error: "Missing image data" });

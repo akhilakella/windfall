@@ -172,6 +172,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     else endTour();
   });
   document.getElementById("replayTourBtn").addEventListener("click", () => { closePanel("profilePanel"); startTour(true); });
+  document.getElementById("emailPrefToggle").addEventListener("change", async (e) => {
+    const enabled = e.target.checked;
+    try {
+      const res = await apiFetch("/api/email-prefs", { method: "POST", body: JSON.stringify({ enabled }) });
+      if (res.ok) { currentUser.emailNotifications = enabled; showToast(enabled ? "Tree emails turned on" : "Tree emails turned off"); }
+      else { e.target.checked = !enabled; showToast("Could not save that setting"); }
+    } catch { e.target.checked = !enabled; showToast("Could not save that setting"); }
+  });
   document.getElementById("shareStatsBtn").addEventListener("click", openShareCard);
   document.getElementById("shareCardShareBtn").addEventListener("click", shareShareCard);
   document.getElementById("shareCardDownloadBtn").addEventListener("click", downloadShareCard);
@@ -804,6 +812,7 @@ function updateProfilePanel() {
   document.getElementById("statKg").textContent = (currentUser.kgRescued || 0).toFixed(1);
   document.getElementById("statTrees").textContent = Math.max(allTrees.filter(t => t.reportedBy === currentUser.id).length, currentUser.treesReported || 0);
   document.getElementById("statPickups").textContent = currentUser.pickups || 0;
+  document.getElementById("emailPrefToggle").checked = currentUser.emailNotifications !== false;
   const badgeMap = {
     "developer": ["⚙️", "Developer"],
     "admin": ["👑", "Admin"],

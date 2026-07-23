@@ -137,6 +137,9 @@ const FEATURES = [
   ["Email: password reset",           [R.srv("Reset your Windfall password")]],
   ["Email: weekly admin digest",      [R.srvfn("buildWeeklyDigest"), R.srvfn("digestEmailHtml"), R.srvfn("sendWeeklyDigestIfDue"), R.route("/api/admin/send-digest"), R.id("sendDigestBtn")]],
   ["Email: Resend integration",       [R.srv("api.resend.com/emails"), R.srv("RESEND_API_KEY")]],
+  ["Email: notify tree owner",        [R.srvfn("notifyTreeOwner"), R.srvfn("treeActivityEmailHtml"), R.srv("emailNotifications")]],
+  ["Email notification opt-out",      [R.route("/api/email-prefs"), R.id("emailPrefToggle")]],
+  ["Rate limiting",                   [R.srvfn("rateLimit"), R.srvfn("underLimit"), R.srv('scope: "login"'), R.srv('scope: "register"'), R.srv("trust proxy"), R.srv("429")]],
   ["Automated off-site backup",       [R.srvfn("buildBackup"), R.srvfn("emailBackup"), R.srvfn("sendBackupIfDue"), R.route("/api/admin/send-backup"), R.id("sendBackupBtn"), R.srv("backup:lastSent"), R.srv("attachments")]],
 
   ["Onboarding tour",                 [R.app("TOUR_SLIDES"), R.fn("startTour"), R.fn("renderTourSlide"), R.fn("endTour"), R.id("tourOverlay"), R.id("tourNext"), R.id("tourSkip"), R.id("replayTourBtn"), R.app("wf_seenTour"), R.css("tour-card")]],
