@@ -27,7 +27,7 @@ app.use(express.static(path.join(__dirname)));
 // Render sits behind a proxy, so trust it to read the real client IP
 app.set("trust proxy", 1);
 
-// Photos are stored as base64 data URLs inside the tree record in Redis —
+// Photos are stored as base64 data URLs inside the tree record in Redis.
 // Render's disk is ephemeral, so files written to it vanish on every deploy.
 // The frontend compresses photos before upload so these stay small (~100-200KB).
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -86,20 +86,20 @@ function welcomeEmailHtml(name, appUrl) {
       <div style="font-size:1.9rem;font-weight:800;letter-spacing:6px;color:#e8f0e6;margin-bottom:4px;">WINDFALL</div>
       <div style="height:3px;width:60px;background:linear-gradient(90deg,#7db874,#d4a843);margin:14px auto 24px;border-radius:2px;"></div>
 
-      <h1 style="font-size:1.35rem;color:#d4a843;margin:0 0 16px;">Welcome aboard, ${firstName}! 🎉</h1>
+      <h1 style="font-size:1.35rem;color:#d4a843;margin:0 0 16px;">Welcome aboard, ${firstName}</h1>
 
       <p style="font-size:0.98rem;line-height:1.65;color:#c9d8c4;margin:0 0 16px;">
-        Your account has been approved — you're officially part of the Windfall community.
+        Your account has been approved, so you are officially part of the Windfall community.
       </p>
       <p style="font-size:0.98rem;line-height:1.65;color:#c9d8c4;margin:0 0 16px;">
-        Every apple you map and every kilo you rescue is fruit that would've gone to waste — now it feeds people and animals across Warwickshire instead. Small actions, real impact. 🌿
+        Every tree you map and every kilogram you rescue is fruit that would otherwise have gone to waste. Instead it feeds people and animals across Warwickshire. Small actions, real impact.
       </p>
       <p style="font-size:1.05rem;line-height:1.6;color:#7db874;font-weight:700;margin:0 0 28px;">
-        Let's do this together. 💪
+        Let's do this together.
       </p>
 
       <a href="${appUrl}" style="display:inline-block;background:#4a7c3f;color:#ffffff;padding:15px 40px;border-radius:12px;text-decoration:none;font-weight:700;font-size:1rem;box-shadow:0 6px 18px rgba(74,124,63,0.4);">
-        🍎 Open Windfall
+        Open Windfall
       </a>
 
       <p style="font-size:0.8rem;color:#556b52;margin:32px 0 0;line-height:1.6;">
@@ -155,7 +155,7 @@ async function notifyTreeOwner(tree, actorId, { subject, headline, detail }) {
 // Send an email via Resend. Returns silently if no API key is configured.
 // `attachments` (optional): [{ filename, content }] where content is base64.
 async function sendEmail({ to, subject, html, attachments }) {
-  if (!process.env.RESEND_API_KEY) { console.error("RESEND_API_KEY not set — email skipped"); return false; }
+  if (!process.env.RESEND_API_KEY) { console.error("RESEND_API_KEY not set, email skipped"); return false; }
   try {
     const payload = { from: process.env.EMAIL_FROM || "Windfall <onboarding@resend.dev>", to, subject, html };
     if (attachments && attachments.length) payload.attachments = attachments;
@@ -187,7 +187,7 @@ app.post("/api/register", rateLimit({ scope: "register", max: 5, windowSec: 3600
       return res.json({ token, user: { id, name, email: user.email, kgRescued: 0, treesReported: 0, pickups: 0, badges: [] } });
     }
     // Notify the admin so they don't have to keep checking the app manually
-    const appUrl = process.env.APP_URL || "https://windfall-jvc3.onrender.com";
+    const appUrl = process.env.APP_URL || "https://windfall-app.co.uk";
     sendEmail({
       to: ADMIN_EMAIL,
       subject: `🌱 New Windfall sign-up: ${name}`,
@@ -205,6 +205,8 @@ app.post("/api/login", rateLimit({ scope: "login", max: 10, windowSec: 900, mess
     const userId = await redis.get(`user:email:${email.toLowerCase()}`);
     if (!userId) return res.status(401).json({ error: "Invalid email or password" });
     const user = JSON.parse(await redis.get(`user:${userId}`));
+    // Guard against an orphaned email index pointing at a deleted user record
+    if (!user || !user.password) return res.status(401).json({ error: "Invalid email or password" });
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ error: "Invalid email or password" });
     if (user.status === "pending") return res.status(403).json({ error: "pending", message: "Your account is awaiting approval from the admin." });
@@ -258,7 +260,7 @@ app.post("/api/forgot-password", rateLimit({ scope: "forgot", max: 5, windowSec:
     if (!userId) return res.json({ success: true });
     const resetToken = uuidv4();
     await redis.set(`reset:${resetToken}`, userId, "EX", 3600);
-    const resetUrl = `${process.env.APP_URL || "https://windfall-jvc3.onrender.com"}/reset-password?token=${resetToken}`;
+    const resetUrl = `${process.env.APP_URL || "https://windfall-app.co.uk"}/reset-password?token=${resetToken}`;
     await sendEmail({
       to: email.toLowerCase(),
       subject: "Reset your Windfall password",
@@ -314,7 +316,7 @@ app.post("/api/trees", authMiddleware, rateLimit({ scope: "addtree", by: "user",
   } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
 });
 
-app.patch("/api/trees/:id/pickup", authMiddleware, async (req, res) => {
+app.patch("/api/trees/:id/pickup", authMiddleware, rateLimit({ scope: "pickup", by: "user", max: 40, windowSec: 3600, message: "You have logged a lot of pickups in the last hour. Please try again shortly." }), async (req, res) => {
   try {
     const raw = await redis.get(`tree:${req.params.id}`);
     if (!raw) return res.status(404).json({ error: "Tree not found" });
@@ -322,6 +324,7 @@ app.patch("/api/trees/:id/pickup", authMiddleware, async (req, res) => {
     const kgNum = parseFloat(req.body.kg) || 0;
     const validDests = ["eaten", "animals", "juice", "baking", "donated"];
     const destination = validDests.includes(req.body.destination) ? req.body.destination : "eaten";
+    if (!Array.isArray(tree.pickups)) tree.pickups = [];
     tree.pickups.push({ by: req.user.id, byName: req.user.name, kg: kgNum, destination, at: Date.now() });
     tree.status = "picked";
     await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
@@ -425,7 +428,7 @@ app.post("/api/admin/approve/:id", authMiddleware, adminMiddleware, async (req, 
 
     // Welcome the new member (only on the pending → approved transition)
     if (wasPending && user.email) {
-      const appUrl = process.env.APP_URL || "https://windfall-jvc3.onrender.com";
+      const appUrl = process.env.APP_URL || "https://windfall-app.co.uk";
       sendEmail({
         to: user.email,
         subject: "🍎 You're in! Welcome to Windfall",
@@ -475,7 +478,9 @@ app.post("/api/admin/reset-stats", authMiddleware, adminMiddleware, async (req, 
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       const u = JSON.parse(await redis.get(key));
-      if (u) { u.kgRescued = 0; u.pickups = 0; u.treesReported = 0; u.badges = []; await redis.set(key, JSON.stringify(u)); }
+      // Clear the badge-tracking fields too, otherwise all-rounder / night-owl /
+      // season-opener would immediately come back after a reset.
+      if (u) { u.kgRescued = 0; u.pickups = 0; u.treesReported = 0; u.badges = []; u.pickedTypes = []; u.nightOwl = false; u.seasonOpener = false; await redis.set(key, JSON.stringify(u)); }
     }
     const treeKeys = await redis.keys("tree:*");
     for (const key of treeKeys) {
@@ -484,6 +489,8 @@ app.post("/api/admin/reset-stats", authMiddleware, adminMiddleware, async (req, 
       const t = JSON.parse(await redis.get(key));
       if (t) { t.pickups = []; t.status = "active"; await redis.set(key, JSON.stringify(t)); }
     }
+    // Let a new season opener be crowned after a reset
+    await redis.del(`season:opener:${new Date().getFullYear()}`);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
@@ -574,7 +581,7 @@ app.delete("/api/admin/announcements/:id", authMiddleware, adminMiddleware, asyn
 // ---- MAINTENANCE MODE ----
 const MAINTENANCE_KEY = "maintenance:status";
 
-// Public — anyone (even logged out) can check whether the app is in maintenance mode
+// Public, anyone (even logged out) can check whether the app is in maintenance mode
 app.get("/api/maintenance", async (req, res) => {
   try {
     const raw = await redis.get(MAINTENANCE_KEY);
@@ -582,7 +589,7 @@ app.get("/api/maintenance", async (req, res) => {
   } catch { res.json({ enabled: false, message: "" }); }
 });
 
-// Admin only — toggle maintenance mode on/off, with an optional custom message
+// Admin only, toggle maintenance mode on/off, with an optional custom message
 app.post("/api/admin/maintenance", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { enabled, message } = req.body;
@@ -643,7 +650,7 @@ function digestEmailHtml(d, appUrl) {
         ${row("🧺", "Pickups logged", d.weekPickups)}
         ${row("🌳", "New trees mapped", d.newTrees)}
         ${row("👥", "New members", d.newUsers.length ? esc(d.newUsers.join(", ")) : "none")}
-        ${row("⏳", "Awaiting approval", d.pendingCount > 0 ? `<span style="color:#ff8a7a;">${d.pendingCount} — action needed!</span>` : "0")}
+        ${row("⏳", "Awaiting approval", d.pendingCount > 0 ? `<span style="color:#ff8a7a;">${d.pendingCount}, action needed!</span>` : "0")}
       </table>
       <h2 style="font-size:1rem;color:#d4a843;margin:0 0 6px;">All time</h2>
       <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
@@ -675,16 +682,16 @@ async function sendWeeklyDigestIfDue() {
     if (lastSent >= due) return;
     await redis.set("digest:lastSent", String(Date.now())); // claim first so we never double-send
     const d = await buildWeeklyDigest();
-    const appUrl = process.env.APP_URL || "https://windfall-jvc3.onrender.com";
+    const appUrl = process.env.APP_URL || "https://windfall-app.co.uk";
     await sendEmail({
       to: ADMIN_EMAIL,
-      subject: `🍎 Windfall weekly digest — ${d.weekKg.toFixed(1)}kg rescued, ${d.newUsers.length} new member${d.newUsers.length === 1 ? "" : "s"}`,
+      subject: `🍎 Windfall weekly digest: ${d.weekKg.toFixed(1)}kg rescued, ${d.newUsers.length} new member${d.newUsers.length === 1 ? "" : "s"}`,
       html: digestEmailHtml(d, appUrl)
     });
     console.log("Weekly digest sent");
   } catch (e) { console.error("Digest error:", e.message); }
 }
-// Check hourly while awake, and shortly after every boot — so on the free tier
+// Check hourly while awake, and shortly after every boot, so on the free tier
 // (which sleeps when idle) the digest goes out on the first wake-up after Monday 9am.
 setInterval(sendWeeklyDigestIfDue, 60 * 60 * 1000);
 setTimeout(sendWeeklyDigestIfDue, 15000);
@@ -693,10 +700,10 @@ setTimeout(sendWeeklyDigestIfDue, 15000);
 app.post("/api/admin/send-digest", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const d = await buildWeeklyDigest();
-    const appUrl = process.env.APP_URL || "https://windfall-jvc3.onrender.com";
+    const appUrl = process.env.APP_URL || "https://windfall-app.co.uk";
     await sendEmail({
       to: ADMIN_EMAIL,
-      subject: `🍎 Windfall weekly digest — ${d.weekKg.toFixed(1)}kg rescued this week`,
+      subject: `🍎 Windfall weekly digest: ${d.weekKg.toFixed(1)}kg rescued this week`,
       html: digestEmailHtml(d, appUrl)
     });
     res.json({ success: true });
@@ -706,7 +713,7 @@ app.post("/api/admin/send-digest", authMiddleware, adminMiddleware, async (req, 
 // ---- AUTOMATED OFF-SITE BACKUP ----
 // Dumps every user + tree to a JSON file and emails it to the admin, so the
 // data survives even if the Redis database is ever wiped. Photos (large base64
-// blobs) are stripped to keep the email well under Resend's size limit — the
+// blobs) are stripped to keep the email well under Resend's size limit, the
 // critical data (accounts, tree locations, pickups, comments, stats) is kept.
 async function buildBackup() {
   const users = [], trees = [];
@@ -751,7 +758,7 @@ async function emailBackup() {
   </div>`;
   return await sendEmail({
     to: ADMIN_EMAIL,
-    subject: `🗄️ Windfall backup — ${stamp} (${backup.counts.users} users, ${backup.counts.trees} trees, ${sizeKb}KB)`,
+    subject: `🗄️ Windfall backup: ${stamp} (${backup.counts.users} users, ${backup.counts.trees} trees, ${sizeKb}KB)`,
     html,
     attachments: [{ filename: `windfall-backup-${stamp}.json`, content: base64 }]
   });
@@ -775,7 +782,7 @@ app.post("/api/admin/send-backup", authMiddleware, adminMiddleware, async (req, 
   try {
     const ok = await emailBackup();
     if (ok) { await redis.set("backup:lastSent", String(Date.now())); res.json({ success: true }); }
-    else res.status(500).json({ error: "Backup email failed — check server logs" });
+    else res.status(500).json({ error: "Backup email failed, check server logs" });
   } catch (err) { console.error("Manual backup error:", err); res.status(500).json({ error: "Server error" }); }
 });
 
@@ -864,7 +871,7 @@ app.post("/api/ai-check", authMiddleware, rateLimit({ scope: "aicheck", by: "use
       try {
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`, "HTTP-Referer": "https://windfall-jvc3.onrender.com", "X-Title": "Windfall" },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`, "HTTP-Referer": "https://windfall-app.co.uk", "X-Title": "Windfall" },
           body: JSON.stringify({ model, messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } }, { type: "text", text: prompt }] }], max_tokens: 300 })
         });
         const data = await response.json();

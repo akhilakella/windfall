@@ -1,5 +1,5 @@
 // ============================================================
-// WINDFALL — app.js
+// WINDFALL, app.js
 // ============================================================
 let token = localStorage.getItem("wf_token");
 let currentUser = null;
@@ -40,7 +40,7 @@ function captureUserPos() {
       userPos = { lat: p.coords.latitude, lng: p.coords.longitude };
       if (activeDistFilter) applyFilters(); // distance filter was waiting on this
     },
-    () => { if (activeDistFilter) showToast("Couldn't get your location — showing all trees"); },
+    () => { if (activeDistFilter) showToast("Couldn't get your location, showing all trees"); },
     { maximumAge: 300000, timeout: 10000 }
   );
 }
@@ -124,7 +124,7 @@ function openSeasonsPanel() {
         </div>
         <div class="season-strip">${cells}</div>
       </div>`;
-  }).join("") + `<p style="font-size:0.78rem;color:var(--text-muted);text-align:center;">🌳 "Other" fruit varies — check the tree's notes.</p>`;
+  }).join("") + `<p style="font-size:0.78rem;color:var(--text-muted);text-align:center;">🌳 "Other" fruit varies, check the tree's notes.</p>`;
   openPanel("seasonsPanel");
 }
 
@@ -135,7 +135,7 @@ function updateSeasonHint() {
   if (!s) { el.textContent = ""; return; }
   el.innerHTML = inSeason(type)
     ? `🌟 ${capitalise(type)}s are in season right now (${s.label})`
-    : `🗓️ ${capitalise(type)}s are usually ripe ${s.label} — double-check the fruit!`;
+    : `🗓️ ${capitalise(type)}s are usually ripe ${s.label}, double-check the fruit!`;
 }
 
 // ==================== INIT ====================
@@ -193,11 +193,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     else if (!stillBlocked) { document.getElementById("maintenanceScreen").classList.remove("active"); document.getElementById("authScreen").classList.add("active"); }
   });
 
-  // Shared tree link — remember it, open after login + map load
+  // Shared tree link, remember it, open after login + map load
   const treeMatch = window.location.pathname.match(/^\/tree\/([a-zA-Z0-9-]+)/);
   if (treeMatch) { pendingTreeId = treeMatch[1]; window.history.replaceState({}, "", "/"); }
 
-  // Public map route — show read-only map without login
+  // Public map route, show read-only map without login
   if (window.location.pathname === "/map" && !token) {
     const params = new URLSearchParams(window.location.search);
     if (!params.get("token")) { openPublicMap(); return; }
@@ -472,7 +472,7 @@ async function checkMaintenanceMode() {
     const data = await res.json();
     const screen = document.getElementById("maintenanceScreen");
     if (data.enabled && !isAdmin) {
-      document.getElementById("maintenanceMsg").textContent = (data.message && data.message.trim()) || "We're making some improvements to Windfall right now. Hang tight — we'll be back shortly!";
+      document.getElementById("maintenanceMsg").textContent = (data.message && data.message.trim()) || "We're making some improvements to Windfall right now. Hang tight, we'll be back shortly!";
       document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
       screen.classList.add("active");
       return true;
@@ -641,8 +641,8 @@ function openTreePanel(treeId) {
   map.closePopup();
   const emoji = getFruitEmoji(tree.type);
   document.getElementById("treePanelTitle").textContent = `${emoji} ${capitalise(tree.type)} Tree`;
-  const pickupList = (tree.pickups || []).map(p => { const d = DEST_META[p.destination]; return `<div class="pickup-row"><span>${esc(p.byName)}</span><span>${d ? d[0] + " " : ""}${esc(p.kg)}kg · ${timeSince(p.at)}</span></div>`; }).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet — be the first!</p>";
-  const commentList = (tree.comments || []).map(c => `<div class="comment-row"><span class="comment-name" style="cursor:pointer" onclick="openUserProfile('${esc(c.userId)}')">${esc(c.userName)}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${esc(c.text)}</p></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No comments yet — leave a note!</p>";
+  const pickupList = (tree.pickups || []).map(p => { const d = DEST_META[p.destination]; return `<div class="pickup-row"><span>${esc(p.byName)}</span><span>${d ? d[0] + " " : ""}${esc(p.kg)}kg · ${timeSince(p.at)}</span></div>`; }).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet, be the first!</p>";
+  const commentList = (tree.comments || []).map(c => `<div class="comment-row"><span class="comment-name" style="cursor:pointer" onclick="openUserProfile('${esc(c.userId)}')">${esc(c.userName)}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${esc(c.text)}</p></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No comments yet, leave a note!</p>";
   document.getElementById("treePanelBody").innerHTML = `
     ${tree.photo ? `<img src="${esc(tree.photo)}" class="tree-detail-photo" alt="Tree photo" onerror="this.remove()" />` : ""}
     <div class="tree-meta">
@@ -701,10 +701,10 @@ async function shareTree(treeId) {
   const url = `${location.origin}/tree/${treeId}`;
   const title = tree ? `${getFruitEmoji(tree.type)} ${capitalise(tree.type)} tree on Windfall` : "A fruit tree on Windfall";
   if (navigator.share) {
-    try { await navigator.share({ title, text: `${title} — come help rescue the fruit! 🌿`, url }); return; }
+    try { await navigator.share({ title, text: `${title}, come help rescue the fruit! 🌿`, url }); return; }
     catch (e) { if (e.name === "AbortError") return; }
   }
-  try { await navigator.clipboard.writeText(url); showToast("🔗 Link copied — send it to a friend!"); }
+  try { await navigator.clipboard.writeText(url); showToast("🔗 Link copied, send it to a friend!"); }
   catch { prompt("Copy this link:", url); }
 }
 window.shareTree = shareTree;
@@ -887,7 +887,7 @@ function renderLeaderboard(filter) {
       ${destChips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:12px;">${destChips}</div>` : ""}
     </div>
     ${visible.length === 0
-      ? `<p style="color:var(--text-muted);text-align:center">${q ? "No rescuers match that search 🔍" : (isSeason ? "No pickups logged this season yet. Be the first!" : "No rescuers yet — be first! 🍎")}</p>`
+      ? `<p style="color:var(--text-muted);text-align:center">${q ? "No rescuers match that search 🔍" : (isSeason ? "No pickups logged this season yet. Be the first!" : "No rescuers yet, be first! 🍎")}</p>`
       : visible.map(({ u, i }) => `
         <div class="leader-row">
           <div class="leader-rank ${medals[i]||""}">${i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div>
@@ -989,7 +989,7 @@ function applyFilters() {
 // ==================== HEATMAP ====================
 function toggleHeatmap() {
   if (!map) return;
-  if (typeof L.heatLayer !== "function") { showToast("Heatmap not loaded yet — try again in a moment"); return; }
+  if (typeof L.heatLayer !== "function") { showToast("Heatmap not loaded yet, try again in a moment"); return; }
   heatmapActive = !heatmapActive;
   const btn = document.getElementById("heatmapBtn");
   if (heatmapActive) {
@@ -1012,7 +1012,7 @@ function toggleHeatmap() {
     btn.style.background = "rgba(74,124,63,0.55)";
     btn.style.borderRadius = "8px";
     btn.title = "Hide heatmap";
-    showToast("🌡️ Heatmap on — brighter = more fruit");
+    showToast("🌡️ Heatmap on, brighter = more fruit");
   } else {
     if (heatLayer) map.removeLayer(heatLayer);
     applyFilters(); // restore markers
@@ -1101,7 +1101,7 @@ function setupAdminTabs() {
     setLoading("sendDigestBtn", true, "📧 Email me this week's digest");
     try {
       const res = await apiFetch("/api/admin/send-digest", { method: "POST" });
-      if (res.ok) showToast("📧 Digest sent — check your inbox!");
+      if (res.ok) showToast("📧 Digest sent, check your inbox!");
       else showToast("Failed to send digest");
     } catch { showToast("Error sending digest"); }
     finally { setLoading("sendDigestBtn", false, "📧 Email me this week's digest"); }
@@ -1111,7 +1111,7 @@ function setupAdminTabs() {
     setLoading("sendBackupBtn", true, "🗄️ Email me a backup now");
     try {
       const res = await apiFetch("/api/admin/send-backup", { method: "POST" });
-      if (res.ok) showToast("🗄️ Backup emailed — check your inbox!");
+      if (res.ok) showToast("🗄️ Backup emailed, check your inbox!");
       else { const d = await res.json().catch(() => ({})); showToast(d.error || "Failed to send backup"); }
     } catch { showToast("Error sending backup"); }
     finally { setLoading("sendBackupBtn", false, "🗄️ Email me a backup now"); }
@@ -1141,13 +1141,13 @@ async function loadMaintenanceStatus() {
     const box = document.getElementById("maintenanceStatusBox");
     document.getElementById("maintenanceMessageInput").value = data.message || "";
     if (data.enabled) {
-      statusText.textContent = "🔴 ON — visitors see the maintenance screen, you still have full access";
+      statusText.textContent = "🔴 ON, visitors see the maintenance screen, you still have full access";
       box.style.background = "rgba(192,57,43,0.1)";
       box.style.border = "1px solid rgba(192,57,43,0.3)";
       btn.textContent = "✅ Turn Maintenance Mode Off";
       btn.className = "btn-secondary";
     } else {
-      statusText.textContent = "🟢 OFF — everyone can use the app as normal";
+      statusText.textContent = "🟢 OFF, everyone can use the app as normal";
       box.style.background = "rgba(76,175,80,0.1)";
       box.style.border = "1px solid rgba(76,175,80,0.3)";
       btn.textContent = "🚧 Turn Maintenance Mode On";
@@ -1157,7 +1157,7 @@ async function loadMaintenanceStatus() {
   } catch { showToast("Could not load maintenance status"); }
 }
 
-// Updates the red count badge on the Admin nav tab — visual backup in case an email is missed
+// Updates the red count badge on the Admin nav tab, visual backup in case an email is missed
 async function refreshAdminBadge() {
   if (!isAdmin) return;
   try {
@@ -1324,7 +1324,7 @@ async function loadAdminUsers() {
 async function deleteUser(userId) {
   const userName = adminUsersCache.find(u => u.id === userId)?.name || "this user";
   console.log("deleteUser called with id:", JSON.stringify(userId), "name:", userName);
-  if (!userId) { showToast("⚠️ This user has no ID — can't delete (data issue)"); return; }
+  if (!userId) { showToast("⚠️ This user has no ID, can't delete (data issue)"); return; }
   if (!await confirmDialog(`Delete user "${userName}"? This cannot be undone.`, { confirmText: "Delete" })) return;
   try {
     const res = await apiFetch(`/api/admin/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
@@ -1368,7 +1368,7 @@ async function openUpdatesPanel() {
     const res = await fetch("/api/announcements");
     const posts = await res.json();
     document.getElementById("updatesList").innerHTML = posts.length === 0
-      ? `<p style="color:var(--text-muted);text-align:center;">No updates yet — check back soon! 🌿</p>`
+      ? `<p style="color:var(--text-muted);text-align:center;">No updates yet, check back soon! 🌿</p>`
       : posts.map(p => `
           <div class="my-tree-card" style="cursor:default;">
             <div class="my-tree-header">
@@ -1395,7 +1395,7 @@ async function checkAnnouncementsDot() {
   } catch {}
 }
 
-// Community total on the sign-in screen — makes the app feel alive pre-login
+// Community total on the sign-in screen, makes the app feel alive pre-login
 async function loadCommunityImpact() {
   try {
     const res = await fetch("/api/leaderboard");
@@ -1828,7 +1828,7 @@ async function apiFetch(url, opts = {}) {
   return fetch(url, { ...opts, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(opts.headers || {}) }, body: opts.body });
 }
 
-// In-app confirmation dialog — replaces native confirm(), which browsers can
+// In-app confirmation dialog, replaces native confirm(), which browsers can
 // silently suppress ("don't allow more dialogs") and which misbehaves in PWAs.
 function confirmDialog(message, { confirmText = "Confirm", danger = true } = {}) {
   return new Promise(resolve => {
