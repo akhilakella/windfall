@@ -75,6 +75,7 @@ const FEATURES = [
   ["Report a tree",                   [R.fn("submitTree"), R.id("reportPanel"), R.id("treeType"), R.id("landType"), R.id("submitTreeBtn")]],
   ["Use my location (geocode)",       [R.id("useLocationBtn"), R.app("nominatim")]],
   ["Photo upload + compression",      [R.fn("compressImage"), R.srv("memoryStorage"), R.srv("base64")]],
+  ["Photos served separately (fast map)", [R.srvfn("publicTree"), R.route("/api/trees/:id/photo"), R.srv("hasPhoto"), R.app("tree.hasPhoto"), R.srv("Cache-Control")]],
   ["AI fruit checker (inline)",       [R.route("/api/ai-check"), R.id("aiCheckBtn"), R.id("aiResult")]],
   ["AI fruit checker (standalone)",   [R.fn("openAiCheckerPanel"), R.id("aiCheckerPanel"), R.id("aiCheckerRunBtn")]],
   ["AI model fallback chain",         [R.srv("for (const model of models)")]],

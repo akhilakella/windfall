@@ -287,6 +287,14 @@ app.post("/api/reset-password", async (req, res) => {
 });
 
 // ---- TREES ----
+// Photos are large base64 blobs, so they are never sent with tree data.
+// Clients get a `hasPhoto` flag and load the image itself from
+// /api/trees/:id/photo, which keeps the map payload small and fast.
+function publicTree(t) {
+  const { photo, ...rest } = t;
+  return { ...rest, hasPhoto: !!(photo && String(photo).startsWith("data:")) };
+}
+
 app.get("/api/trees", async (req, res) => {
   try {
     const keys = await redis.keys("tree:*");
@@ -295,10 +303,25 @@ app.get("/api/trees", async (req, res) => {
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       const t = await redis.get(key);
-      if (t) trees.push(JSON.parse(t));
+      if (t) trees.push(publicTree(JSON.parse(t)));
     }
     res.json(trees);
   } catch (err) { res.status(500).json({ error: "Server error" }); }
+});
+
+// Serves a single tree's photo as a real image, with long cache headers
+app.get("/api/trees/:id/photo", async (req, res) => {
+  try {
+    const raw = await redis.get(`tree:${req.params.id}`);
+    if (!raw) return res.status(404).end();
+    const photo = JSON.parse(raw).photo;
+    if (!photo || !String(photo).startsWith("data:")) return res.status(404).end();
+    const m = /^data:([^;]+);base64,(.*)$/s.exec(photo);
+    if (!m) return res.status(404).end();
+    res.set("Content-Type", m[1]);
+    res.set("Cache-Control", "public, max-age=604800");
+    res.send(Buffer.from(m[2], "base64"));
+  } catch { res.status(404).end(); }
 });
 
 app.post("/api/trees", authMiddleware, rateLimit({ scope: "addtree", by: "user", max: 30, windowSec: 3600, message: "You have added a lot of trees in the last hour. Please try again shortly." }), upload.single("photo"), async (req, res) => {
@@ -312,7 +335,7 @@ app.post("/api/trees", authMiddleware, rateLimit({ scope: "addtree", by: "user",
     user.treesReported = (user.treesReported || 0) + 1;
     user.badges = computeBadges(user);
     await redis.set(`user:${req.user.id}`, JSON.stringify(user));
-    res.json(tree);
+    res.json(publicTree(tree));
   } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
 });
 
@@ -346,7 +369,7 @@ app.patch("/api/trees/:id/pickup", authMiddleware, rateLimit({ scope: "pickup", 
     else if (opener === req.user.id) { user.seasonOpener = true; }
     user.badges = computeBadges(user);
     await redis.set(`user:${req.user.id}`, JSON.stringify(user));
-    res.json(tree);
+    res.json(publicTree(tree));
     notifyTreeOwner(tree, req.user.id, {
       subject: `${req.user.name} rescued ${kgNum}kg from your ${tree.type} tree`,
       headline: `${req.user.name} just rescued ${kgNum}kg of fruit from your ${tree.type} tree.`,
@@ -362,7 +385,7 @@ app.patch("/api/trees/:id/status", authMiddleware, async (req, res) => {
     const tree = JSON.parse(raw);
     tree.status = req.body.status || tree.status;
     await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
-    res.json(tree);
+    res.json(publicTree(tree));
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
@@ -545,7 +568,7 @@ app.patch("/api/admin/trees/:id", authMiddleware, adminMiddleware, async (req, r
     if (address !== undefined) tree.address = address;
     if (verified !== undefined) tree.verified = !!verified;
     await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
-    res.json(tree);
+    res.json(publicTree(tree));
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 

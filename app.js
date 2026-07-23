@@ -644,7 +644,7 @@ function openTreePanel(treeId) {
   const pickupList = (tree.pickups || []).map(p => { const d = DEST_META[p.destination]; return `<div class="pickup-row"><span>${esc(p.byName)}</span><span>${d ? d[0] + " " : ""}${esc(p.kg)}kg · ${timeSince(p.at)}</span></div>`; }).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet, be the first!</p>";
   const commentList = (tree.comments || []).map(c => `<div class="comment-row"><span class="comment-name" style="cursor:pointer" onclick="openUserProfile('${esc(c.userId)}')">${esc(c.userName)}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${esc(c.text)}</p></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No comments yet, leave a note!</p>";
   document.getElementById("treePanelBody").innerHTML = `
-    ${tree.photo ? `<img src="${esc(tree.photo)}" class="tree-detail-photo" alt="Tree photo" onerror="this.remove()" />` : ""}
+    ${tree.hasPhoto ? `<img src="/api/trees/${esc(tree.id)}/photo" class="tree-detail-photo" alt="Tree photo" loading="lazy" onerror="this.remove()" />` : ""}
     <div class="tree-meta">
       <span class="tree-chip">${emoji} ${esc(capitalise(tree.type))}</span>
       <span class="tree-chip">📍 ${esc(capitalise(tree.landType))}</span>
