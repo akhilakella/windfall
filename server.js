@@ -11,6 +11,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "windfall-secret-key-change-in-prod";
 const ADMIN_EMAIL = "akhilakella@outlook.com";
+// Where admin notifications (sign-ups, digest, backup) are sent. Defaults to the
+// admin email, but can be pointed at a more reliable inbox (e.g. Gmail) via env var.
+const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL || ADMIN_EMAIL;
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const redis = new Redis(redisUrl, {
@@ -189,7 +192,7 @@ app.post("/api/register", rateLimit({ scope: "register", max: 5, windowSec: 3600
     // Notify the admin so they don't have to keep checking the app manually
     const appUrl = process.env.APP_URL || "https://windfall-app.co.uk";
     sendEmail({
-      to: ADMIN_EMAIL,
+      to: NOTIFY_EMAIL,
       subject: `🌱 New Windfall sign-up: ${name}`,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0f1a0e;color:#e8f0e6;border-radius:16px;"><h1 style="color:#d4a843;">🍎 Windfall</h1><p>Someone new wants to join Windfall:</p><div style="background:rgba(74,124,63,0.15);border:1px solid rgba(74,124,63,0.4);border-radius:10px;padding:16px;margin:16px 0;"><p style="margin:0 0 6px;"><strong>Name:</strong> ${esc(name)}</p><p style="margin:0;"><strong>Email:</strong> ${esc(email.toLowerCase())}</p></div><p>Open the app and head to <strong>Admin → Requests</strong> to approve or reject them.</p><a href="${appUrl}" style="display:inline-block;background:#4a7c3f;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;">Review Request</a></div>`
     });
@@ -729,7 +732,7 @@ async function sendWeeklyDigestIfDue() {
     const d = await buildWeeklyDigest();
     const appUrl = process.env.APP_URL || "https://windfall-app.co.uk";
     await sendEmail({
-      to: ADMIN_EMAIL,
+      to: NOTIFY_EMAIL,
       subject: `🍎 Windfall weekly digest: ${d.weekKg.toFixed(1)}kg rescued, ${d.newUsers.length} new member${d.newUsers.length === 1 ? "" : "s"}`,
       html: digestEmailHtml(d, appUrl)
     });
@@ -747,7 +750,7 @@ app.post("/api/admin/send-digest", authMiddleware, adminMiddleware, async (req, 
     const d = await buildWeeklyDigest();
     const appUrl = process.env.APP_URL || "https://windfall-app.co.uk";
     await sendEmail({
-      to: ADMIN_EMAIL,
+      to: NOTIFY_EMAIL,
       subject: `🍎 Windfall weekly digest: ${d.weekKg.toFixed(1)}kg rescued this week`,
       html: digestEmailHtml(d, appUrl)
     });
@@ -802,7 +805,7 @@ async function emailBackup() {
     <p style="font-size:0.85rem;color:#8aab85;">Keep this email safe. If the database is ever lost, this file can restore everything (photos are not included to keep the backup small).</p>
   </div>`;
   return await sendEmail({
-    to: ADMIN_EMAIL,
+    to: NOTIFY_EMAIL,
     subject: `🗄️ Windfall backup: ${stamp} (${backup.counts.users} users, ${backup.counts.trees} trees, ${sizeKb}KB)`,
     html,
     attachments: [{ filename: `windfall-backup-${stamp}.json`, content: base64 }]
