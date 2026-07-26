@@ -61,7 +61,8 @@ const TOUR_SLIDES = [
 let tourIndex = 0;
 
 function startTour(force) {
-  if (!force && localStorage.getItem("wf_seenTour")) return;
+  // Bump this key whenever the tour is meaningfully updated to re-show it once to everyone
+  if (!force && localStorage.getItem("wf_seenTour_v2")) return;
   tourIndex = 0;
   renderTourSlide();
   document.getElementById("tourOverlay").style.display = "flex";
@@ -79,7 +80,7 @@ function renderTourSlide() {
 }
 
 function endTour() {
-  localStorage.setItem("wf_seenTour", "1");
+  localStorage.setItem("wf_seenTour_v2", "1");
   document.getElementById("tourOverlay").style.display = "none";
 }
 
