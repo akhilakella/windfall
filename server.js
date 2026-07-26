@@ -309,18 +309,29 @@ app.get("/api/trees", async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
+// Decode a stored "data:...;base64,..." string and send it as a real image
+function sendDataUrlImage(res, photo) {
+  if (!photo || !String(photo).startsWith("data:")) return res.status(404).end();
+  const m = /^data:([^;]+);base64,(.*)$/s.exec(photo);
+  if (!m) return res.status(404).end();
+  res.set("Content-Type", m[1]);
+  res.set("Cache-Control", "public, max-age=604800");
+  res.send(Buffer.from(m[2], "base64"));
+}
+
 // Serves a single tree's photo as a real image, with long cache headers
 app.get("/api/trees/:id/photo", async (req, res) => {
   try {
     const raw = await redis.get(`tree:${req.params.id}`);
     if (!raw) return res.status(404).end();
-    const photo = JSON.parse(raw).photo;
-    if (!photo || !String(photo).startsWith("data:")) return res.status(404).end();
-    const m = /^data:([^;]+);base64,(.*)$/s.exec(photo);
-    if (!m) return res.status(404).end();
-    res.set("Content-Type", m[1]);
-    res.set("Cache-Control", "public, max-age=604800");
-    res.send(Buffer.from(m[2], "base64"));
+    sendDataUrlImage(res, JSON.parse(raw).photo);
+  } catch { res.status(404).end(); }
+});
+
+// Serves a pickup's haul photo
+app.get("/api/pickups/:pickupId/photo", async (req, res) => {
+  try {
+    sendDataUrlImage(res, await redis.get(`pickupphoto:${req.params.pickupId}`));
   } catch { res.status(404).end(); }
 });
 
@@ -345,10 +356,18 @@ app.patch("/api/trees/:id/pickup", authMiddleware, rateLimit({ scope: "pickup", 
     if (!raw) return res.status(404).json({ error: "Tree not found" });
     const tree = JSON.parse(raw);
     const kgNum = parseFloat(req.body.kg) || 0;
-    const validDests = ["eaten", "animals", "juice", "baking", "donated"];
+    const validDests = ["eaten", "animals", "juice", "baking", "donated", "greenbin", "other"];
     const destination = validDests.includes(req.body.destination) ? req.body.destination : "eaten";
+    const destinationOther = destination === "other" ? String(req.body.destinationOther || "").trim().slice(0, 40) : "";
     if (!Array.isArray(tree.pickups)) tree.pickups = [];
-    tree.pickups.push({ by: req.user.id, byName: req.user.name, kg: kgNum, destination, at: Date.now() });
+    // Store any haul photo under its own key so it never bloats the tree list
+    const pickupId = uuidv4();
+    let hasPhoto = false;
+    if (typeof req.body.photo === "string" && req.body.photo.startsWith("data:image")) {
+      await redis.set(`pickupphoto:${pickupId}`, req.body.photo);
+      hasPhoto = true;
+    }
+    tree.pickups.push({ id: pickupId, by: req.user.id, byName: req.user.name, kg: kgNum, destination, destinationOther, hasPhoto, at: Date.now() });
     tree.status = "picked";
     await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
     const user = JSON.parse(await redis.get(`user:${req.user.id}`));
@@ -514,6 +533,9 @@ app.post("/api/admin/reset-stats", authMiddleware, adminMiddleware, async (req, 
     }
     // Let a new season opener be crowned after a reset
     await redis.del(`season:opener:${new Date().getFullYear()}`);
+    // Clear now-orphaned pickup photos
+    const photoKeys = await redis.keys("pickupphoto:*");
+    if (photoKeys.length) await redis.del(...photoKeys);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });

@@ -641,7 +641,16 @@ function openTreePanel(treeId) {
   map.closePopup();
   const emoji = getFruitEmoji(tree.type);
   document.getElementById("treePanelTitle").textContent = `${emoji} ${capitalise(tree.type)} Tree`;
-  const pickupList = (tree.pickups || []).map(p => { const d = DEST_META[p.destination]; return `<div class="pickup-row"><span>${esc(p.byName)}</span><span>${d ? d[0] + " " : ""}${esc(p.kg)}kg · ${timeSince(p.at)}</span></div>`; }).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet, be the first!</p>";
+  const pickupList = (tree.pickups || []).map(p => {
+    const d = DEST_META[p.destination];
+    const destLabel = p.destination === "other" && p.destinationOther ? `✏️ ${esc(p.destinationOther)}` : (d ? `${d[0]} ${esc(d[1])}` : "");
+    const thumb = p.hasPhoto && p.id ? `<img src="/api/pickups/${esc(p.id)}/photo" alt="Haul photo" loading="lazy" onerror="this.remove()" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:6px;" />` : "";
+    return `<div class="pickup-row" style="flex-direction:column;align-items:stretch;">
+      <div style="display:flex;justify-content:space-between;gap:8px;"><span>${esc(p.byName)}</span><span>${esc(p.kg)}kg · ${timeSince(p.at)}</span></div>
+      ${destLabel ? `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:2px;">${destLabel}</div>` : ""}
+      ${thumb}
+    </div>`;
+  }).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No pickups yet, be the first!</p>";
   const commentList = (tree.comments || []).map(c => `<div class="comment-row"><span class="comment-name" style="cursor:pointer" onclick="openUserProfile('${esc(c.userId)}')">${esc(c.userName)}</span><span class="comment-time">${timeSince(c.at)}</span><p class="comment-text">${esc(c.text)}</p></div>`).join("") || "<p style='font-size:0.82rem;color:var(--text-muted)'>No comments yet, leave a note!</p>";
   document.getElementById("treePanelBody").innerHTML = `
     ${tree.hasPhoto ? `<img src="/api/trees/${esc(tree.id)}/photo" class="tree-detail-photo" alt="Tree photo" loading="lazy" onerror="this.remove()" />` : ""}
@@ -671,13 +680,18 @@ function openTreePanel(treeId) {
     <div class="tree-pickup-form">
       <h3 style="font-family:'Fraunces',serif;font-size:1rem;color:var(--text-sub)">Log a Pickup</h3>
       <input type="number" id="pickupKg" placeholder="How many kg did you rescue?" min="0" step="0.5" />
-      <select id="pickupDest">
+      <select id="pickupDest" onchange="togglePickupOther()">
         <option value="eaten">🍎 Eaten fresh</option>
         <option value="animals">🐾 Animal feed / sanctuary</option>
         <option value="juice">🍾 Juice or cider</option>
         <option value="baking">🥧 Baking &amp; cooking</option>
         <option value="donated">🤝 Donated / shared</option>
+        <option value="greenbin">♻️ Green food waste bin</option>
+        <option value="other">✏️ Other (type below)</option>
       </select>
+      <input type="text" id="pickupDestOther" placeholder="What did you do with them?" maxlength="40" style="display:none;" />
+      <label style="font-size:0.82rem;color:var(--text-sub);">Photo of the haul (optional)</label>
+      <input type="file" id="pickupPhoto" accept="image/*" />
       <button class="btn-primary btn-sm" onclick="logPickup('${tree.id}')">✅ Log Pickup</button>
     </div>
     <div>
@@ -710,19 +724,36 @@ async function shareTree(treeId) {
 window.shareTree = shareTree;
 
 const DEST_META = {
-  eaten:   ["🍎", "Eaten fresh"],
-  animals: ["🐾", "Animal feed"],
-  juice:   ["🍾", "Juice & cider"],
-  baking:  ["🥧", "Baking"],
-  donated: ["🤝", "Donated"]
+  eaten:    ["🍎", "Eaten fresh"],
+  animals:  ["🐾", "Animal feed"],
+  juice:    ["🍾", "Juice & cider"],
+  baking:   ["🥧", "Baking"],
+  donated:  ["🤝", "Donated"],
+  greenbin: ["♻️", "Green bin"],
+  other:    ["✏️", "Other"]
 };
+
+function togglePickupOther() {
+  const sel = document.getElementById("pickupDest");
+  const other = document.getElementById("pickupDestOther");
+  if (sel && other) other.style.display = sel.value === "other" ? "block" : "none";
+}
+window.togglePickupOther = togglePickupOther;
 
 async function logPickup(treeId) {
   const kg = parseFloat(document.getElementById("pickupKg").value) || 0;
   if (kg <= 0) { showToast("Enter how many kg you rescued!"); return; }
   const destination = document.getElementById("pickupDest")?.value || "eaten";
+  const destinationOther = destination === "other" ? (document.getElementById("pickupDestOther")?.value || "").trim() : "";
+  if (destination === "other" && !destinationOther) { showToast("Type what you did with the fruit"); return; }
+  const photoFile = document.getElementById("pickupPhoto")?.files[0];
+  let photo = null;
+  if (photoFile) {
+    const compressed = await compressImage(photoFile);
+    photo = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.onerror = () => r(null); fr.readAsDataURL(compressed); });
+  }
   try {
-    const res = await apiFetch(`/api/trees/${treeId}/pickup`, { method: "PATCH", body: JSON.stringify({ kg, destination }) });
+    const res = await apiFetch(`/api/trees/${treeId}/pickup`, { method: "PATCH", body: JSON.stringify({ kg, destination, destinationOther, photo }) });
     const updated = await res.json();
     if (!res.ok) { showToast(updated.error || "Failed to log pickup"); return; }
     const idx = allTrees.findIndex(t => t.id === treeId);
@@ -880,10 +911,22 @@ function renderLeaderboard(filter) {
     .map(([d, kg]) => { const [icon, label] = DEST_META[d] || ["🍏", d]; return `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(74,124,63,0.18);border:1px solid var(--border);border-radius:100px;padding:4px 10px;font-size:0.75rem;color:var(--text-sub);">${icon} ${label}: <strong style="color:var(--green-light);">${kg.toFixed(1)}kg</strong></span>`; })
     .join(" ");
 
+  // Progress towards this year's 1 tonne community target
+  const targetKg = 1000;
+  const year = new Date().getFullYear();
+  const rawPct = ((totalKg || 0) / targetKg) * 100;
+  const barPct = Math.min(100, rawPct);
+
   document.getElementById("leaderboardList").innerHTML = `
     <div style="background:rgba(74,124,63,0.15);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center;margin-bottom:8px;">
       <div style="font-family:'Fraunces',serif;font-size:2rem;font-weight:900;color:var(--green-light);">${(totalKg||0).toFixed(1)}kg</div>
       <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">${isSeason ? `rescued by the community in ${esc(seasonLabel || "")} 🍎` : "total fruit rescued by Warwickshire community 🍎"}</div>
+      <div style="margin-top:14px;">
+        <div style="height:10px;background:rgba(255,255,255,0.08);border-radius:100px;overflow:hidden;">
+          <div style="height:100%;width:${barPct}%;background:linear-gradient(90deg,var(--green-main),var(--gold));border-radius:100px;"></div>
+        </div>
+        <div style="font-size:0.76rem;color:var(--text-sub);margin-top:6px;"><strong style="color:var(--gold);">${rawPct.toFixed(0)}%</strong> of our 1 tonne target for ${year}</div>
+      </div>
       ${destChips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:12px;">${destChips}</div>` : ""}
     </div>
     ${visible.length === 0

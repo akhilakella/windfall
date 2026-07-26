@@ -246,7 +246,7 @@
     </div>
     <div class="field-group"><label>Estimated Fruit (kg)</label><input type="number" id="estKg" placeholder="e.g. 20" min="0" step="1" /></div>
     <div class="field-group"><label>Notes</label><textarea id="treeNotes" placeholder="e.g. Big Bramley near the gate..." rows="3"></textarea></div>
-    <div class="field-group"><label>Photo (optional)</label><input type="file" id="treePhoto" accept="image/*" capture="environment" /></div>
+    <div class="field-group"><label>Photo (optional)</label><input type="file" id="treePhoto" accept="image/*" /></div>
     <button id="aiCheckBtn" class="btn-secondary" style="display:none">🤖 AI Fruit Quality Check</button>
     <div id="aiResult" class="ai-result hidden"></div>
     <div id="reportError" class="auth-error hidden"></div>
@@ -455,7 +455,7 @@
   <div class="panel-header"><h2>🤖 AI Fruit Checker</h2><button class="panel-close" id="closeAiChecker">✕</button></div>
   <div class="panel-body">
     <p class="panel-hint">Take or upload a photo of fruit to instantly check its quality with AI.</p>
-    <div class="field-group"><label>Photo</label><input type="file" id="aiCheckerPhoto" accept="image/*" capture="environment" /></div>
+    <div class="field-group"><label>Photo</label><input type="file" id="aiCheckerPhoto" accept="image/*" /></div>
     <button id="aiCheckerRunBtn" class="btn-secondary" style="display:none;">🤖 Check Fruit Quality</button>
     <div id="aiCheckerResult" class="ai-result hidden"></div>
     <div style="margin-top:16px;padding:14px;background:rgba(74,124,63,0.1);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.82rem;color:var(--text-sub);line-height:1.7;">
