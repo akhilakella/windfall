@@ -549,29 +549,27 @@ app.get("/api/admin/analytics", authMiddleware, adminMiddleware, async (req, res
     const treeKeys = await redis.keys("tree:*");
     let totalUsers = 0, totalTrees = 0;
     const userMap = {};
-    // Build user map from user records
+    // Read kg and pickups straight from each user record (same source as the
+    // leaderboard), keyed by the id that trees/pickups actually reference, so
+    // the two views always agree.
     for (const key of userKeys) {
       if (key.includes("email")) continue;
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       const u = JSON.parse(await redis.get(key));
-      if (u && u.name && u.status === "approved") {
+      if (u && u.name && u.status !== "pending" && u.status !== "rejected") {
         totalUsers++;
-        userMap[u.id] = { name: u.name, kgRescued: 0, treesReported: 0, pickups: u.pickups || 0 };
+        const id = u.id || parts[1];
+        userMap[id] = { name: u.name, kgRescued: u.kgRescued || 0, treesReported: 0, pickups: u.pickups || 0 };
       }
     }
-    // Count trees and kg from actual tree records
+    // Count trees per reporter from the actual tree records
     for (const key of treeKeys) {
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       totalTrees++;
       const t = JSON.parse(await redis.get(key));
       if (t && t.reportedBy && userMap[t.reportedBy]) userMap[t.reportedBy].treesReported++;
-      if (t && t.pickups) {
-        for (const p of t.pickups) {
-          if (p.by && userMap[p.by]) userMap[p.by].kgRescued += p.kg || 0;
-        }
-      }
     }
     const totalKg = Object.values(userMap).reduce((s, u) => s + u.kgRescued, 0);
     const userStats = Object.values(userMap);
@@ -595,6 +593,36 @@ app.patch("/api/admin/trees/:id", authMiddleware, adminMiddleware, async (req, r
     await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
     res.json(publicTree(tree));
   } catch (err) { res.status(500).json({ error: "Server error" }); }
+});
+
+// Admin: delete a single pickup from a tree (mistakes or trolls), and roll back
+// the rescuer's totals so the leaderboard and stats stay accurate.
+app.delete("/api/admin/trees/:id/pickups/:index", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const raw = await redis.get(`tree:${req.params.id}`);
+    if (!raw) return res.status(404).json({ error: "Tree not found" });
+    const tree = JSON.parse(raw);
+    const idx = parseInt(req.params.index, 10);
+    if (!Array.isArray(tree.pickups) || isNaN(idx) || idx < 0 || idx >= tree.pickups.length) {
+      return res.status(404).json({ error: "Pickup not found" });
+    }
+    const [removed] = tree.pickups.splice(idx, 1);
+    if (removed.id) await redis.del(`pickupphoto:${removed.id}`);
+    // Subtract the pickup from the rescuer's running totals
+    if (removed.by) {
+      const uraw = await redis.get(`user:${removed.by}`);
+      if (uraw) {
+        const u = JSON.parse(uraw);
+        u.kgRescued = Math.max(0, (u.kgRescued || 0) - (removed.kg || 0));
+        u.pickups = Math.max(0, (u.pickups || 0) - 1);
+        u.badges = computeBadges(u);
+        await redis.set(`user:${removed.by}`, JSON.stringify(u));
+      }
+    }
+    if (tree.pickups.length === 0) tree.status = "active";
+    await redis.set(`tree:${tree.id}`, JSON.stringify(tree));
+    res.json(publicTree(tree));
+  } catch (err) { console.error("Delete pickup error:", err); res.status(500).json({ error: "Server error" }); }
 });
 
 app.get("/api/announcements", async (req, res) => {

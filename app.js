@@ -645,12 +645,13 @@ function openTreePanel(treeId) {
   map.closePopup();
   const emoji = getFruitEmoji(tree.type);
   document.getElementById("treePanelTitle").textContent = `${emoji} ${capitalise(tree.type)} Tree`;
-  const pickupList = (tree.pickups || []).map(p => {
+  const pickupList = (tree.pickups || []).map((p, pi) => {
     const d = DEST_META[p.destination];
     const destLabel = p.destination === "other" && p.destinationOther ? `✏️ ${esc(p.destinationOther)}` : (d ? `${d[0]} ${esc(d[1])}` : "");
     const thumb = p.hasPhoto && p.id ? `<img src="/api/pickups/${esc(p.id)}/photo" alt="Haul photo" loading="lazy" onerror="this.remove()" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:6px;" />` : "";
+    const adminDel = isAdmin ? `<button onclick="deletePickup('${esc(tree.id)}', ${pi})" title="Delete this pickup" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:6px;padding:2px 8px;font-size:0.72rem;cursor:pointer;flex-shrink:0;">🗑 Delete</button>` : "";
     return `<div class="pickup-row" style="flex-direction:column;align-items:stretch;">
-      <div style="display:flex;justify-content:space-between;gap:8px;"><span>${esc(p.byName)}</span><span>${esc(p.kg)}kg · ${timeSince(p.at)}</span></div>
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><span>${esc(p.byName)}</span><span style="display:flex;gap:8px;align-items:center;">${esc(p.kg)}kg · ${timeSince(p.at)}${adminDel ? " " + adminDel : ""}</span></div>
       ${destLabel ? `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:2px;">${destLabel}</div>` : ""}
       ${thumb}
     </div>`;
@@ -771,6 +772,21 @@ async function logPickup(treeId) {
   } catch { showToast("Failed to log pickup"); }
 }
 window.logPickup = logPickup;
+
+async function deletePickup(treeId, index) {
+  if (!await confirmDialog("Delete this pickup? It will be removed and its kg subtracted from the rescuer's total. This cannot be undone.", { confirmText: "Delete" })) return;
+  try {
+    const res = await apiFetch(`/api/admin/trees/${treeId}/pickups/${index}`, { method: "DELETE" });
+    const updated = await res.json();
+    if (!res.ok) { showToast(updated.error || "Failed to delete pickup"); return; }
+    const idx = allTrees.findIndex(t => t.id === treeId);
+    if (idx !== -1) allTrees[idx] = updated;
+    addTreeMarker(updated);
+    openTreePanel(treeId);
+    showToast("Pickup deleted");
+  } catch { showToast("Failed to delete pickup"); }
+}
+window.deletePickup = deletePickup;
 
 async function updateTreeStatus(treeId, status) {
   try {
