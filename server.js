@@ -868,26 +868,26 @@ app.get("/api/leaderboard", async (req, res) => {
     const season = req.query.period === "season";
     const seasonStart = new Date(new Date().getFullYear(), 0, 1).getTime();
 
-    // Load eligible users
-    const userKeys = await redis.keys("user:*");
+    // Load eligible users. Fetch all records in a single batched call (mget)
+    // instead of one round-trip per user, which is what made this slow.
+    const userKeys = (await redis.keys("user:*")).filter(k => !k.includes("email") && k.split(":").length === 2);
+    const userVals = userKeys.length ? await redis.mget(userKeys) : [];
     const userMap = {};
-    for (const key of userKeys) {
-      if (key.includes("email")) continue;
-      if (!key.startsWith("user:")) continue;
-      const u = JSON.parse(await redis.get(key));
+    for (const raw of userVals) {
+      if (!raw) continue;
+      const u = JSON.parse(raw);
       if (u && u.name && u.status !== "pending" && u.status !== "rejected") {
         userMap[u.id] = { id: u.id, name: u.name, email: u.email, badges: u.badges || [], allTimeKg: u.kgRescued || 0, allTimePickups: u.pickups || 0 };
       }
     }
 
-    // Aggregate trees + pickups (respecting the season window when requested)
-    const treeKeys = await redis.keys("tree:*");
+    // Aggregate trees + pickups, also batched in a single call
+    const treeKeys = (await redis.keys("tree:*")).filter(k => k.split(":").length === 2);
+    const treeVals = treeKeys.length ? await redis.mget(treeKeys) : [];
     const treeCounts = {}, seasonKg = {}, seasonPickups = {};
-    for (const key of treeKeys) {
-      const parts = key.split(":");
-      if (parts.length !== 2) continue;
-      const t = JSON.parse(await redis.get(key));
-      if (!t) continue;
+    for (const raw of treeVals) {
+      if (!raw) continue;
+      const t = JSON.parse(raw);
       if (t.reportedBy && (!season || (t.reportedAt || 0) >= seasonStart)) treeCounts[t.reportedBy] = (treeCounts[t.reportedBy] || 0) + 1;
       (t.pickups || []).forEach(p => {
         if (season && (p.at || 0) < seasonStart) return;
