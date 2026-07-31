@@ -1050,32 +1050,51 @@ function applyFilters() {
 }
 
 // ==================== HEATMAP ====================
+let heatZoomBound = false;
+
+// Blobs grow when zoomed in and shrink when zoomed out, so the map reads well
+// at any zoom instead of tiny dots far out or one big smear up close.
+function heatRadiusForZoom(z) {
+  return Math.max(22, Math.min(75, (z - 9) * 11 + 30));
+}
+
+function renderHeatmap() {
+  if (!heatmapActive || !map || typeof L.heatLayer !== "function") return;
+  const points = allTrees.map(t => {
+    const kgTotal = (t.pickups || []).reduce((s, p) => s + (p.kg || 0), 0) || t.estimatedKg || 5;
+    // Floor of 0.3 so even a small tree shows as a clear warm spot; more kg = hotter
+    return [t.lat, t.lng, Math.max(0.3, Math.min(kgTotal / 25, 1.0))];
+  });
+  const radius = heatRadiusForZoom(map.getZoom());
+  const opts = {
+    radius, blur: Math.round(radius * 0.75), maxZoom: 18, minOpacity: 0.4,
+    gradient: { 0.0: "#2b6a2d", 0.4: "#7db874", 0.6: "#e8d44a", 0.8: "#e8912b", 1.0: "#e0432b" }
+  };
+  if (!heatLayer) {
+    heatLayer = L.heatLayer(points, opts);
+    heatLayer.addTo(map);
+  } else {
+    heatLayer.setOptions(opts);
+    heatLayer.setLatLngs(points);
+    if (!map.hasLayer(heatLayer)) heatLayer.addTo(map);
+  }
+}
+
 function toggleHeatmap() {
   if (!map) return;
   if (typeof L.heatLayer !== "function") { showToast("Heatmap not loaded yet, try again in a moment"); return; }
   heatmapActive = !heatmapActive;
   const btn = document.getElementById("heatmapBtn");
   if (heatmapActive) {
-    // Build intensity points: use actual kg rescued, fall back to estimatedKg, then default 5
-    const points = allTrees.map(t => {
-      const kgTotal = (t.pickups || []).reduce((s, p) => s + (p.kg || 0), 0) || t.estimatedKg || 5;
-      return [t.lat, t.lng, Math.min(kgTotal / 30, 1.0)];
-    });
-    if (!heatLayer) {
-      heatLayer = L.heatLayer(points, {
-        radius: 38, blur: 28, maxZoom: 17,
-        gradient: { 0.0: "#0d2b0d", 0.35: "#2d6a2d", 0.6: "#6abf6a", 1.0: "#d4e84c" }
-      });
-    } else {
-      heatLayer.setLatLngs(points);
-    }
-    heatLayer.addTo(map);
+    renderHeatmap();
+    // Redraw at the new size whenever the user zooms (bound once)
+    if (!heatZoomBound) { map.on("zoomend", renderHeatmap); heatZoomBound = true; }
     // Hide individual markers while heatmap is on
     Object.values(markers).forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
     btn.style.background = "rgba(74,124,63,0.55)";
     btn.style.borderRadius = "8px";
     btn.title = "Hide heatmap";
-    showToast("🌡️ Heatmap on, brighter = more fruit");
+    showToast("🌡️ Heatmap on, warmer colours mean more fruit");
   } else {
     if (heatLayer) map.removeLayer(heatLayer);
     applyFilters(); // restore markers
