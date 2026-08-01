@@ -302,6 +302,11 @@ async function doLogin() {
       document.getElementById("pendingScreen").classList.add("active");
       return;
     }
+    if (res.status === 403 && data.error === "suspended") {
+      document.getElementById("authScreen").classList.remove("active");
+      document.getElementById("suspendedScreen").classList.add("active");
+      return;
+    }
     if (!res.ok) { showErr(err, data.error || data.message || "Login failed."); return; }
     token = data.token; currentUser = data.user;
     localStorage.setItem("wf_token", token);
@@ -340,6 +345,11 @@ async function doRegister() {
 
 document.getElementById("backFromPendingBtn").addEventListener("click", () => {
   document.getElementById("pendingScreen").classList.remove("active");
+  document.getElementById("authScreen").classList.add("active");
+});
+
+document.getElementById("backFromSuspendedBtn").addEventListener("click", () => {
+  document.getElementById("suspendedScreen").classList.remove("active");
   document.getElementById("authScreen").classList.add("active");
 });
 
