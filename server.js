@@ -47,6 +47,24 @@ function adminMiddleware(req, res, next) {
   next();
 }
 
+// Suspended users: their trees, pickups and kg are hidden everywhere until they
+// are unsuspended. Nothing is deleted, so it fully reverses. The id set is the
+// single source of truth used by every aggregation endpoint.
+async function getSuspendedIds() {
+  try { return new Set(await redis.smembers("suspended:users")); }
+  catch { return new Set(); }
+}
+
+// Stops a suspended user from acting even if they still hold a valid token
+async function blockIfSuspended(req, res, next) {
+  try {
+    if (req.user && await redis.sismember("suspended:users", req.user.id)) {
+      return res.status(403).json({ error: "Your account is suspended. Please contact the admin." });
+    }
+  } catch {}
+  next();
+}
+
 // ---- RATE LIMITING ----
 // Counts requests per key in Redis with an auto-expiring window. Protects
 // against brute-forced logins, signup spam, and abuse of the AI checker.
@@ -214,6 +232,7 @@ app.post("/api/login", rateLimit({ scope: "login", max: 10, windowSec: 900, mess
     if (!match) return res.status(401).json({ error: "Invalid email or password" });
     if (user.status === "pending") return res.status(403).json({ error: "pending", message: "Your account is awaiting approval from the admin." });
     if (user.status === "rejected") return res.status(403).json({ error: "rejected", message: "Your account request was not approved. Contact akhilakella@outlook.com for help." });
+    if (user.status === "suspended") return res.status(403).json({ error: "suspended", message: "Your account has been suspended. Please contact the admin." });
     user.badges = computeBadges(user);
     await redis.set(`user:${userId}`, JSON.stringify(user));
     const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
@@ -300,13 +319,18 @@ function publicTree(t) {
 
 app.get("/api/trees", async (req, res) => {
   try {
+    const suspended = await getSuspendedIds();
     const keys = await redis.keys("tree:*");
     const trees = [];
     for (const key of keys) {
       const parts = key.split(":");
       if (parts.length !== 2) continue;
-      const t = await redis.get(key);
-      if (t) trees.push(publicTree(JSON.parse(t)));
+      const raw = await redis.get(key);
+      if (!raw) continue;
+      const t = JSON.parse(raw);
+      if (suspended.has(t.reportedBy)) continue; // hide suspended users' own trees
+      if (suspended.size && Array.isArray(t.pickups)) t.pickups = t.pickups.filter(p => !suspended.has(p.by)); // hide their pickups on other trees
+      trees.push(publicTree(t));
     }
     res.json(trees);
   } catch (err) { res.status(500).json({ error: "Server error" }); }
@@ -338,7 +362,7 @@ app.get("/api/pickups/:pickupId/photo", async (req, res) => {
   } catch { res.status(404).end(); }
 });
 
-app.post("/api/trees", authMiddleware, rateLimit({ scope: "addtree", by: "user", max: 30, windowSec: 3600, message: "You have added a lot of trees in the last hour. Please try again shortly." }), upload.single("photo"), async (req, res) => {
+app.post("/api/trees", authMiddleware, blockIfSuspended, rateLimit({ scope: "addtree", by: "user", max: 30, windowSec: 3600, message: "You have added a lot of trees in the last hour. Please try again shortly." }), upload.single("photo"), async (req, res) => {
   try {
     const { lat, lng, type, landType, notes, estimatedKg, address } = req.body;
     if (!lat || !lng || !type) return res.status(400).json({ error: "lat, lng and type required" });
@@ -353,7 +377,7 @@ app.post("/api/trees", authMiddleware, rateLimit({ scope: "addtree", by: "user",
   } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
 });
 
-app.patch("/api/trees/:id/pickup", authMiddleware, rateLimit({ scope: "pickup", by: "user", max: 40, windowSec: 3600, message: "You have logged a lot of pickups in the last hour. Please try again shortly." }), async (req, res) => {
+app.patch("/api/trees/:id/pickup", authMiddleware, blockIfSuspended, rateLimit({ scope: "pickup", by: "user", max: 40, windowSec: 3600, message: "You have logged a lot of pickups in the last hour. Please try again shortly." }), async (req, res) => {
   try {
     const raw = await redis.get(`tree:${req.params.id}`);
     if (!raw) return res.status(404).json({ error: "Tree not found" });
@@ -411,7 +435,7 @@ app.patch("/api/trees/:id/status", authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
-app.post("/api/trees/:id/comments", authMiddleware, rateLimit({ scope: "comment", by: "user", max: 20, windowSec: 600, message: "You are commenting very quickly. Please wait a moment." }), async (req, res) => {
+app.post("/api/trees/:id/comments", authMiddleware, blockIfSuspended, rateLimit({ scope: "comment", by: "user", max: 20, windowSec: 600, message: "You are commenting very quickly. Please wait a moment." }), async (req, res) => {
   try {
     const raw = await redis.get(`tree:${req.params.id}`);
     if (!raw) return res.status(404).json({ error: "Tree not found" });
@@ -493,7 +517,28 @@ app.delete("/api/admin/users/:id", authMiddleware, adminMiddleware, async (req, 
     // Always delete by the key we were given, even if the record's own id field is stale/missing
     await redis.del(`user:${id}`);
     if (user.email) await redis.del(`user:email:${user.email.toLowerCase()}`);
-    console.log("Deleted user:", user.email || id);
+    await redis.srem("suspended:users", id);
+    // Remove all of their trees, and their pickups from everyone else's trees,
+    // so no orphaned data or kg is left behind.
+    const treeKeys = await redis.keys("tree:*");
+    for (const key of treeKeys) {
+      if (key.split(":").length !== 2) continue;
+      const traw = await redis.get(key);
+      if (!traw) continue;
+      const tree = JSON.parse(traw);
+      if (tree.reportedBy === id) {
+        for (const p of (tree.pickups || [])) { if (p.id) await redis.del(`pickupphoto:${p.id}`); }
+        await redis.del(key);
+        continue;
+      }
+      if (Array.isArray(tree.pickups) && tree.pickups.some(p => p.by === id)) {
+        for (const p of tree.pickups) { if (p.by === id && p.id) await redis.del(`pickupphoto:${p.id}`); }
+        tree.pickups = tree.pickups.filter(p => p.by !== id);
+        if (tree.pickups.length === 0) tree.status = "active";
+        await redis.set(key, JSON.stringify(tree));
+      }
+    }
+    console.log("Deleted user and their trees/pickups:", user.email || id);
     res.json({ success: true });
   } catch (err) { console.error("Delete user error:", err); res.status(500).json({ error: "Server error" }); }
 });
@@ -507,12 +552,29 @@ app.get("/api/admin/users", authMiddleware, adminMiddleware, async (req, res) =>
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       const u = JSON.parse(await redis.get(key));
-      // Fall back to the id embedded in the key so old records without an id field are still deletable
-      if (u && u.name && u.status !== "pending" && u.status !== "rejected") users.push({ id: u.id || parts[1], name: u.name, email: u.email, kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, joinedAt: u.joinedAt });
+      // Show approved and suspended users (so suspended ones can be restored); hide pending/rejected
+      if (u && u.name && u.status !== "pending" && u.status !== "rejected") users.push({ id: u.id || parts[1], name: u.name, email: u.email, status: u.status || "approved", kgRescued: u.kgRescued || 0, treesReported: u.treesReported || 0, pickups: u.pickups || 0, joinedAt: u.joinedAt });
     }
     users.sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0));
     res.json(users);
   } catch (err) { res.status(500).json({ error: "Server error" }); }
+});
+
+// Suspend or unsuspend a user. Suspending hides their trees, pickups and kg
+// everywhere and blocks their access; unsuspending brings it all back.
+app.post("/api/admin/users/:id/suspend", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const raw = await redis.get(`user:${id}`);
+    if (!raw) return res.status(404).json({ error: "User not found" });
+    const user = JSON.parse(raw);
+    if (user.email === ADMIN_EMAIL) return res.status(400).json({ error: "You cannot suspend the admin account" });
+    const suspend = req.body.suspend !== false;
+    if (suspend) { user.status = "suspended"; await redis.sadd("suspended:users", id); }
+    else { user.status = "approved"; await redis.srem("suspended:users", id); }
+    await redis.set(`user:${id}`, JSON.stringify(user));
+    res.json({ status: user.status });
+  } catch (err) { console.error("Suspend error:", err); res.status(500).json({ error: "Server error" }); }
 });
 
 app.post("/api/admin/reset-stats", authMiddleware, adminMiddleware, async (req, res) => {
@@ -557,7 +619,7 @@ app.get("/api/admin/analytics", authMiddleware, adminMiddleware, async (req, res
       const parts = key.split(":");
       if (parts.length !== 2) continue;
       const u = JSON.parse(await redis.get(key));
-      if (u && u.name && u.status !== "pending" && u.status !== "rejected") {
+      if (u && u.name && u.status !== "pending" && u.status !== "rejected" && u.status !== "suspended") {
         totalUsers++;
         const id = u.id || parts[1];
         userMap[id] = { name: u.name, kgRescued: u.kgRescued || 0, treesReported: 0, pickups: u.pickups || 0 };
@@ -875,7 +937,7 @@ app.get("/api/leaderboard", async (req, res) => {
       if (key.includes("email")) continue;
       if (!key.startsWith("user:")) continue;
       const u = JSON.parse(await redis.get(key));
-      if (u && u.name && u.status !== "pending" && u.status !== "rejected") {
+      if (u && u.name && u.status !== "pending" && u.status !== "rejected" && u.status !== "suspended") {
         userMap[u.id] = { id: u.id, name: u.name, email: u.email, badges: u.badges || [], allTimeKg: u.kgRescued || 0, allTimePickups: u.pickups || 0 };
       }
     }

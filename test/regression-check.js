@@ -126,6 +126,7 @@ const FEATURES = [
   ["Admin panel",                     [R.route("/api/admin/check"), R.fn("openAdminPanel"), R.id("adminPanel")]],
   ["Admin: approve requests",         [R.route("/api/admin/requests"), R.route("/api/admin/approve/:id"), R.fn("loadAdminRequests"), R.fn("approveUser")]],
   ["Admin: reject / delete users",    [R.route("/api/admin/users/:id"), R.fn("rejectUser"), R.fn("deleteUser")]],
+  ["Admin: suspend / unsuspend user", [R.route("/api/admin/users/:id/suspend"), R.fn("suspendUser"), R.srvfn("getSuspendedIds"), R.srvfn("blockIfSuspended"), R.srv("suspended:users"), R.fn("reloadMapMarkers")]],
   ["Admin: pending-count badge",      [R.fn("refreshAdminBadge"), R.fn("setAdminBadge"), R.id("adminBadge")]],
   ["Admin: analytics",                [R.route("/api/admin/analytics"), R.fn("loadAdminAnalytics")]],
   ["Admin: delete a pickup",          [R.route("/api/admin/trees/:id/pickups/:index"), R.fn("deletePickup"), R.app("deletePickup(")]],

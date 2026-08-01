@@ -1392,29 +1392,64 @@ async function loadAdminUsers() {
     adminUsersCache = users;
     document.getElementById("adminUsersList").innerHTML = users.length === 0
       ? `<p style="color:var(--text-muted);font-size:0.85rem">No approved users yet</p>`
-      : users.map(u => `
-          <div class="my-tree-card" style="display:flex;justify-content:space-between;align-items:center;">
-            <div>
-              <div class="my-tree-type" style="font-size:0.9rem;">${esc(u.name)}</div>
+      : users.map(u => {
+          const isAdminUser = u.email === "akhilakella@outlook.com";
+          const suspended = u.status === "suspended";
+          const suspendBtn = suspended
+            ? `<button onclick="suspendUser('${esc(u.id)}', false)" style="background:rgba(76,175,80,0.2);border:1px solid rgba(76,175,80,0.4);color:#81c784;border-radius:8px;padding:5px 10px;font-size:0.75rem;cursor:pointer;flex-shrink:0;">Unsuspend</button>`
+            : `<button onclick="suspendUser('${esc(u.id)}', true)" style="background:rgba(212,168,67,0.15);border:1px solid rgba(212,168,67,0.4);color:var(--gold);border-radius:8px;padding:5px 10px;font-size:0.75rem;cursor:pointer;flex-shrink:0;">Suspend</button>`;
+          const delBtn = `<button onclick="deleteUser('${esc(u.id)}')" title="Delete user and their trees" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;flex-shrink:0;">🗑</button>`;
+          return `
+          <div class="my-tree-card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <div style="min-width:0;">
+              <div class="my-tree-type" style="font-size:0.9rem;">${esc(u.name)} ${suspended ? '<span style="font-size:0.68rem;background:rgba(212,168,67,0.2);color:var(--gold);border:1px solid rgba(212,168,67,0.4);border-radius:100px;padding:1px 7px;">suspended</span>' : ""}</div>
               <div class="my-tree-notes">${esc(u.email)} · ${u.kgRescued.toFixed(1)}kg · ${u.treesReported} trees</div>
             </div>
-            ${u.email !== "akhilakella@outlook.com" ? `<button onclick="deleteUser('${esc(u.id)}')" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;flex-shrink:0;margin-left:10px;">🗑</button>` : `<span style="font-size:0.75rem;color:var(--gold);flex-shrink:0;">👑 Admin</span>`}
-          </div>`).join("");
+            ${isAdminUser ? `<span style="font-size:0.75rem;color:var(--gold);flex-shrink:0;">👑 Admin</span>` : `<div style="display:flex;gap:6px;flex-shrink:0;">${suspendBtn}${delBtn}</div>`}
+          </div>`;
+        }).join("");
   } catch { showToast("Could not load users"); }
+}
+
+// Clear every marker and reload trees, so the map reflects deleted/suspended data
+async function reloadMapMarkers() {
+  if (!map) return;
+  Object.values(markers).forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
+  markers = {};
+  await loadTrees();
+  if (heatmapActive) {
+    Object.values(markers).forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
+    renderHeatmap();
+  }
 }
 
 async function deleteUser(userId) {
   const userName = adminUsersCache.find(u => u.id === userId)?.name || "this user";
   console.log("deleteUser called with id:", JSON.stringify(userId), "name:", userName);
   if (!userId) { showToast("⚠️ This user has no ID, can't delete (data issue)"); return; }
-  if (!await confirmDialog(`Delete user "${userName}"? This cannot be undone.`, { confirmText: "Delete" })) return;
+  if (!await confirmDialog(`Delete user "${userName}"? This also removes all of their trees and pickups, and cannot be undone.`, { confirmText: "Delete" })) return;
   try {
     const res = await apiFetch(`/api/admin/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
-    if (res.ok) { showToast(`🗑 ${userName} deleted`); loadAdminUsers(); refreshAdminBadge(); }
+    if (res.ok) { showToast(`🗑 ${userName} and their trees deleted`); loadAdminUsers(); refreshAdminBadge(); reloadMapMarkers(); }
     else { const d = await res.json().catch(() => ({})); console.error("Delete failed", res.status, d); showToast(d.error || `Failed to delete (${res.status})`); }
   } catch (e) { console.error("Delete threw", e); showToast("Error deleting user"); }
 }
 window.deleteUser = deleteUser;
+
+async function suspendUser(userId, suspend) {
+  const userName = adminUsersCache.find(u => u.id === userId)?.name || "this user";
+  const verb = suspend ? "Suspend" : "Unsuspend";
+  const msg = suspend
+    ? `Suspend "${userName}"? Their trees and kg will be hidden and they will be blocked, until you unsuspend them.`
+    : `Unsuspend "${userName}"? Their trees and kg will be restored.`;
+  if (!await confirmDialog(msg, { confirmText: verb, danger: suspend })) return;
+  try {
+    const res = await apiFetch(`/api/admin/users/${encodeURIComponent(userId)}/suspend`, { method: "POST", body: JSON.stringify({ suspend }) });
+    if (res.ok) { showToast(suspend ? `${userName} suspended` : `${userName} unsuspended`); loadAdminUsers(); reloadMapMarkers(); }
+    else { const d = await res.json().catch(() => ({})); showToast(d.error || `Failed to ${verb.toLowerCase()}`); }
+  } catch { showToast(`Error trying to ${verb.toLowerCase()} user`); }
+}
+window.suspendUser = suspendUser;
 
 async function loadAdminAnnouncements() {
   try {
