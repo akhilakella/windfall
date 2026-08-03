@@ -1,4 +1,4 @@
-const CACHE = "windfall-v19";
+const CACHE = "windfall-v20";
 const STATIC = ["/", "/index.html", "/style.css", "/app.js", "/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", e => {

@@ -640,6 +640,22 @@ app.get("/api/admin/analytics", authMiddleware, adminMiddleware, async (req, res
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
+// Admin moderation view: every tree, unfiltered (includes suspended users'), so
+// the admin can review all activity. Pickup arrays are intact so delete-by-index
+// on this data matches the server exactly.
+app.get("/api/admin/all-trees", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const keys = await redis.keys("tree:*");
+    const trees = [];
+    for (const key of keys) {
+      if (key.split(":").length !== 2) continue;
+      const raw = await redis.get(key);
+      if (raw) trees.push(publicTree(JSON.parse(raw)));
+    }
+    res.json(trees);
+  } catch (err) { res.status(500).json({ error: "Server error" }); }
+});
+
 app.patch("/api/admin/trees/:id", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const raw = await redis.get(`tree:${req.params.id}`);

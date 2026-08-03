@@ -8,6 +8,8 @@ let map = null;
 let markers = {};
 let tempMarker = null;
 let allTrees = [];
+let adminAllTrees = []; // unfiltered trees for the admin moderation view (includes suspended)
+let modView = "trees";  // admin Trees tab view: "trees" or "pickups"
 let activeTypeFilter = "all";
 let activeStatusFilter = "all";
 let activeDistFilter = null; // miles; null = any distance
@@ -1165,6 +1167,17 @@ function setupAdminTabs() {
     });
   });
 
+  // Moderation view: Trees / Pickups toggle + "by user" filter
+  document.querySelectorAll("[data-mod-view]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("[data-mod-view]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      modView = btn.dataset.modView;
+      renderAdminActivity();
+    });
+  });
+  document.getElementById("modUserFilter").addEventListener("change", renderAdminActivity);
+
   document.getElementById("resetStatsBtn").addEventListener("click", async () => {
     if (!await confirmDialog("Reset ALL users' stats back to zero? This cannot be undone.", { confirmText: "Reset All" })) return;
     try {
@@ -1326,15 +1339,39 @@ async function loadAdminAnalytics() {
   } catch { showToast("Could not load analytics"); }
 }
 
-function loadAdminTrees() {
-  document.getElementById("adminTreesList").innerHTML = allTrees.length === 0
-    ? `<p style="color:var(--text-muted);text-align:center">No trees yet.</p>`
-    : allTrees.map(t => `
+async function loadAdminTrees() {
+  // Pull the full, unfiltered set so moderation sees everything (incl. suspended)
+  try { const r = await apiFetch("/api/admin/all-trees"); if (r.ok) adminAllTrees = await r.json(); } catch {}
+  // Populate the "by user" filter from everyone who reported a tree or logged a pickup
+  const names = new Set();
+  adminAllTrees.forEach(t => {
+    if (t.reportedByName) names.add(t.reportedByName.trim());
+    (t.pickups || []).forEach(p => { if (p.byName) names.add(p.byName.trim()); });
+  });
+  const sel = document.getElementById("modUserFilter");
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">All users</option>` + [...names].sort((a, b) => a.localeCompare(b)).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : "";
+  renderAdminActivity();
+}
+
+function renderAdminActivity() {
+  if (modView === "pickups") renderModPickups();
+  else renderModTrees();
+}
+
+function renderModTrees() {
+  const filter = document.getElementById("modUserFilter").value;
+  let list = adminAllTrees.slice().sort((a, b) => (b.reportedAt || 0) - (a.reportedAt || 0));
+  if (filter) list = list.filter(t => (t.reportedByName || "").trim() === filter);
+  document.getElementById("adminTreesList").innerHTML = list.length === 0
+    ? `<p style="color:var(--text-muted);text-align:center">No trees${filter ? " from this user" : " yet"}.</p>`
+    : list.map(t => `
         <div class="my-tree-card">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-            <div>
-              <div class="my-tree-type">${getFruitEmoji(t.type)} ${esc(capitalise(t.type))}</div>
-              <div class="my-tree-notes">by ${esc(t.reportedByName)} · ${esc(t.address || "No address")}</div>
+            <div style="min-width:0;">
+              <div class="my-tree-type">${getFruitEmoji(t.type)} ${esc(capitalise(t.type))} ${t.hasPhoto ? "📷" : '<span style="color:#ff8a7a;font-size:0.7rem;">no photo</span>'}</div>
+              <div class="my-tree-notes">by ${esc(t.reportedByName)} · ${timeSince(t.reportedAt)} · ${esc(t.address || "no address")}</div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;">
               <button onclick="toggleVerifyTree('${esc(t.id)}', ${!t.verified})" title="${t.verified ? 'Remove verification' : 'Mark as verified'}" style="background:${t.verified ? 'rgba(212,168,67,0.2)' : 'rgba(76,175,80,0.2)'};border:1px solid ${t.verified ? 'rgba(212,168,67,0.4)' : 'rgba(76,175,80,0.4)'};color:${t.verified ? 'var(--gold)' : '#81c784'};border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;">${t.verified ? '🔓' : '✅'}</button>
@@ -1350,6 +1387,42 @@ function loadAdminTrees() {
           </div>
         </div>`).join("");
 }
+
+function renderModPickups() {
+  const filter = document.getElementById("modUserFilter").value;
+  const rows = [];
+  adminAllTrees.forEach(t => (t.pickups || []).forEach((p, i) => rows.push({ p, treeId: t.id, treeType: t.type, index: i })));
+  let list = rows.sort((a, b) => (b.p.at || 0) - (a.p.at || 0));
+  if (filter) list = list.filter(x => (x.p.byName || "").trim() === filter);
+  document.getElementById("adminTreesList").innerHTML = list.length === 0
+    ? `<p style="color:var(--text-muted);text-align:center">No pickups${filter ? " from this user" : " yet"}.</p>`
+    : list.map(({ p, treeId, treeType, index }) => {
+        const d = DEST_META[p.destination];
+        const dest = p.destination === "other" && p.destinationOther ? `✏️ ${esc(p.destinationOther)}` : (d ? `${d[0]} ${esc(d[1])}` : "");
+        return `
+        <div class="my-tree-card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div style="min-width:0;">
+            <div class="my-tree-type" style="font-size:0.9rem;">${esc(p.byName)} · ${esc(p.kg)}kg</div>
+            <div class="my-tree-notes">${dest ? dest + " · " : ""}${getFruitEmoji(treeType)} ${esc(capitalise(treeType))} tree · ${timeSince(p.at)}</div>
+          </div>
+          <button onclick="deletePickupAdmin('${esc(treeId)}', ${index})" title="Delete this pickup" style="background:rgba(192,57,43,0.2);border:1px solid rgba(192,57,43,0.4);color:#ff8a7a;border-radius:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;flex-shrink:0;">🗑</button>
+        </div>`;
+      }).join("");
+}
+
+async function deletePickupAdmin(treeId, index) {
+  if (!await confirmDialog("Delete this pickup? Its kg comes off the rescuer's total. This cannot be undone.", { confirmText: "Delete" })) return;
+  try {
+    const res = await apiFetch(`/api/admin/trees/${treeId}/pickups/${index}`, { method: "DELETE" });
+    const updated = await res.json();
+    if (!res.ok) { showToast(updated.error || "Failed to delete pickup"); return; }
+    const idx = allTrees.findIndex(t => t.id === treeId);
+    if (idx !== -1) { allTrees[idx] = updated; addTreeMarker(updated); }
+    showToast("Pickup deleted");
+    loadAdminTrees();
+  } catch { showToast("Error deleting pickup"); }
+}
+window.deletePickupAdmin = deletePickupAdmin;
 
 function openEditTree(treeId) {
   const form = document.getElementById(`editForm-${treeId}`);
@@ -1385,9 +1458,7 @@ async function toggleVerifyTree(treeId, verified) {
     if (res.ok) {
       const updated = await res.json();
       const idx = allTrees.findIndex(t => t.id === treeId);
-      if (idx !== -1) allTrees[idx] = updated;
-      addTreeMarker(updated);
-      applyFilters();
+      if (idx !== -1) { allTrees[idx] = updated; addTreeMarker(updated); applyFilters(); }
       loadAdminTrees();
       showToast(verified ? "✅ Tree verified!" : "🔓 Verification removed");
     } else showToast("Failed to update tree");

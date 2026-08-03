@@ -132,6 +132,7 @@ const FEATURES = [
   ["Admin: analytics",                [R.route("/api/admin/analytics"), R.fn("loadAdminAnalytics")]],
   ["Admin: delete a pickup",          [R.route("/api/admin/trees/:id/pickups/:index"), R.fn("deletePickup"), R.app("deletePickup(")]],
   ["Admin: manage trees",             [R.route("/api/admin/trees/:id"), R.fn("loadAdminTrees"), R.fn("openEditTree"), R.fn("saveEditTree")]],
+  ["Admin: moderation view (trees/pickups by user)", [R.route("/api/admin/all-trees"), R.fn("renderModTrees"), R.fn("renderModPickups"), R.fn("renderAdminActivity"), R.fn("deletePickupAdmin"), R.id("modUserFilter"), R.id("modViewPickupsBtn"), R.app("adminAllTrees")]],
   ["Admin: verify tree",              [R.fn("toggleVerifyTree")]],
   ["Admin: delete tree",              [R.route("/api/trees/:id"), R.fn("deleteTree")]],
   ["Admin: announcements post/delete",[R.route("/api/admin/announcements"), R.fn("loadAdminAnnouncements"), R.fn("deleteAnnouncement")]],
