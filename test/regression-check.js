@@ -116,6 +116,12 @@ const FEATURES = [
   ["Announcements (view)",            [R.route("/api/announcements"), R.fn("openUpdatesPanel"), R.id("updatesBtn")]],
   ["Announcement unread dot",         [R.fn("checkAnnouncementsDot"), R.id("updatesDot"), R.app("wf_seenUpdates"), R.css("icon-dot")]],
   ["Notification bell",               [R.fn("openNotifsPanel"), R.fn("computeNotifications"), R.fn("refreshNotifsBadge"), R.id("notifsBtn"), R.id("notifsBadge"), R.app("wf_seenNotifs")]],
+  ["Web push notifications",          [R.route("/api/push/subscribe"), R.route("/api/push/unsubscribe"), R.route("/api/push/public-key"), R.srvfn("sendPush"), R.srvfn("broadcastPush"), R.fn("enablePush"), R.fn("urlBase64ToUint8Array"), R.id("pushPrefToggle"), { label: "sw.js push handler", test: () => swJs.includes('addEventListener("push"') }]],
+  ["Personal impact stats",          [R.id("impactMeals"), R.id("impactCo2"), R.app("KG_PER_MEAL"), R.app("CO2_PER_KG"), R.css("impact-card")]],
+  ["AI check next steps",            [R.app("NEXT_STEPS"), R.fn("nextStepsHtml"), R.css("ai-next-steps")]],
+  ["Weekly rescue streak",           [R.app("streakWeeks"), R.srv("streakWeeks"), R.srvfn("weekStartMs"), R.id("streakLine")]],
+  ["Hot streak badge",               [R.srv('"hot-streak"'), R.app('"hot-streak"')]],
+  ["Seasonal legend badge",          [R.srv('"seasonal-legend"'), R.app('"seasonal-legend"'), R.srv("seasonKg")]],
 
   ["Seasonal harvest calendar",       [R.app("FRUIT_SEASONS"), R.fn("inSeason"), R.fn("openSeasonsPanel"), R.id("seasonsBtn"), R.id("seasonsPanel"), R.css("season-strip")]],
   ["Season hint in report form",      [R.fn("updateSeasonHint"), R.id("seasonHint")]],

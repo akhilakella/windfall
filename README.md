@@ -89,6 +89,11 @@ On mobile, visit the app URL and tap **"Add to Home Screen"**, it works like a n
 | 🐾 Animal Hero | Rescue 50kg of fruit |
 | 👑 Windfall Legend | Rescue 200kg of fruit |
 | 🧺 Gleaner | Log 5 pickups |
+| 🍇 All-Rounder | Pick every fruit type (apple, pear, plum, cherry, blackberry) |
+| 🦉 Night Owl | Log a pickup between 9pm and 5am |
+| 🌅 Season Opener | Be the first to log a pickup this year |
+| 🔥 Hot Streak | Rescue fruit 3 weeks in a row |
+| 🏅 Seasonal Legend | Rescue 50kg in a single calendar year |
 
 ---
 

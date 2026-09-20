@@ -21,6 +21,14 @@ let userPos = null;
 let lastLeaderboardUsers = null;
 let pendingTreeId = null;
 
+// Personal-impact estimate constants (easy to tweak).
+// KG_PER_MEAL: rough weight of food that makes up one meal (food-redistribution rule of thumb).
+// CO2_PER_KG: kg of CO2e kept out of the waste stream per kg of fruit rescued (conservative).
+const KG_PER_MEAL = 0.42;
+const CO2_PER_KG = 0.5;
+
+let vapidPublicKey = null; // fetched from the server; null when push isn't configured
+
 // ==================== DISTANCE ====================
 function distanceKm(lat1, lng1, lat2, lng2) {
   const R = 6371, toRad = d => d * Math.PI / 180;
@@ -185,6 +193,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (res.ok) { currentUser.emailNotifications = enabled; showToast(enabled ? "Tree emails turned on" : "Tree emails turned off"); }
       else { e.target.checked = !enabled; showToast("Could not save that setting"); }
     } catch { e.target.checked = !enabled; showToast("Could not save that setting"); }
+  });
+  document.getElementById("pushPrefToggle").addEventListener("change", async (e) => {
+    if (e.target.checked) { const ok = await enablePush(); e.target.checked = ok; }
+    else { await disablePush(); e.target.checked = false; }
   });
   document.getElementById("shareStatsBtn").addEventListener("click", openShareCard);
   document.getElementById("shareCardShareBtn").addEventListener("click", shareShareCard);
@@ -473,12 +485,75 @@ async function showApp() {
   updateProfilePanel();
   captureUserPos();
   checkAnnouncementsDot();
+  initPush();
   startTour();
 
   if (!maintenancePollStarted) {
     maintenancePollStarted = true;
     setInterval(checkMaintenanceMode, 60000);
   }
+}
+
+// ==================== WEB PUSH NOTIFICATIONS ====================
+async function initPush() {
+  try {
+    const res = await fetch("/api/push/public-key");
+    const data = await res.json();
+    vapidPublicKey = data.key || null;
+  } catch { vapidPublicKey = null; }
+  refreshPushToggle();
+}
+
+async function refreshPushToggle() {
+  const toggle = document.getElementById("pushPrefToggle");
+  const row = document.getElementById("pushPrefRow");
+  if (!toggle) return;
+  const supported = "serviceWorker" in navigator && "PushManager" in window && !!vapidPublicKey;
+  if (!supported) { if (row) row.style.display = "none"; return; }
+  if (row) row.style.display = "flex";
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    toggle.checked = !!sub;
+  } catch { toggle.checked = false; }
+}
+
+async function enablePush() {
+  if (!vapidPublicKey) { showToast("Notifications aren't set up yet"); return false; }
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) { showToast("Notifications aren't supported on this device"); return false; }
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") { showToast("Notifications blocked — enable them in your browser settings"); return false; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) });
+    const res = await apiFetch("/api/push/subscribe", { method: "POST", body: JSON.stringify({ subscription: sub }) });
+    if (!res.ok) { showToast("Could not turn on notifications"); return false; }
+    showToast("🔔 Notifications on!");
+    return true;
+  } catch { showToast("Could not turn on notifications"); return false; }
+}
+
+async function disablePush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await apiFetch("/api/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint: sub.endpoint }) });
+      await sub.unsubscribe();
+    }
+    showToast("Notifications turned off");
+  } catch {}
+}
+
+// Convert a base64url VAPID key into the Uint8Array the Push API expects.
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
 }
 
 // Returns true if the current (non-admin) user has been shown the maintenance screen
@@ -875,6 +950,13 @@ function updateProfilePanel() {
   document.getElementById("statKg").textContent = (currentUser.kgRescued || 0).toFixed(1);
   document.getElementById("statTrees").textContent = Math.max(allTrees.filter(t => t.reportedBy === currentUser.id).length, currentUser.treesReported || 0);
   document.getElementById("statPickups").textContent = currentUser.pickups || 0;
+  // Personal impact estimates
+  const kg = currentUser.kgRescued || 0;
+  document.getElementById("impactMeals").textContent = Math.round(kg / KG_PER_MEAL);
+  document.getElementById("impactCo2").textContent = (kg * CO2_PER_KG).toFixed(1);
+  // Weekly rescue streak
+  const streak = currentUser.streakWeeks || 0;
+  document.getElementById("streakLine").textContent = streak >= 2 ? `🔥 ${streak}-week rescue streak — keep it going!` : (streak === 1 ? "🔥 1-week rescue streak — log a pickup next week to build it!" : "");
   document.getElementById("emailPrefToggle").checked = currentUser.emailNotifications !== false;
   const badgeMap = {
     "developer": ["⚙️", "Developer"],
@@ -887,7 +969,9 @@ function updateProfilePanel() {
     "gleaner":["🧺","Gleaner"],
     "all-rounder":["🍇","All-Rounder"],
     "night-owl":["🦉","Night Owl"],
-    "season-opener":["🌅","Season Opener"]
+    "season-opener":["🌅","Season Opener"],
+    "hot-streak":["🔥","Hot Streak"],
+    "seasonal-legend":["🏅","Seasonal Legend"]
   };
   const bc = document.getElementById("badgesContainer");
   const badges = currentUser.badges || [];
@@ -1663,7 +1747,7 @@ async function openUserProfile(userId) {
     const res = await apiFetch(`/api/users/${userId}/profile`);
     if (!res.ok) { showToast("Could not load profile"); return; }
     const u = await res.json();
-    const badgeMap = { "developer":["⚙️","Developer"],"admin":["👑","Admin"],"tree-scout":["🌱","Tree Scout"],"orchard-mapper":["🗺️","Orchard Mapper"],"apple-saver":["🍎","Apple Saver"],"animal-hero":["🐾","Animal Hero"],"windfall-legend":["👑","Windfall Legend"],"gleaner":["🧺","Gleaner"],"all-rounder":["🍇","All-Rounder"],"night-owl":["🦉","Night Owl"],"season-opener":["🌅","Season Opener"] };
+    const badgeMap = { "developer":["⚙️","Developer"],"admin":["👑","Admin"],"tree-scout":["🌱","Tree Scout"],"orchard-mapper":["🗺️","Orchard Mapper"],"apple-saver":["🍎","Apple Saver"],"animal-hero":["🐾","Animal Hero"],"windfall-legend":["👑","Windfall Legend"],"gleaner":["🧺","Gleaner"],"all-rounder":["🍇","All-Rounder"],"night-owl":["🦉","Night Owl"],"season-opener":["🌅","Season Opener"],"hot-streak":["🔥","Hot Streak"],"seasonal-legend":["🏅","Seasonal Legend"] };
     const treesAdded = allTrees.filter(t => t.reportedBy === userId);
     const badgesHtml = (u.badges || []).length === 0
       ? `<p style="font-size:0.85rem;color:var(--text-muted)">No badges yet</p>`
@@ -1700,6 +1784,18 @@ function openAdminPanel() {
 }
 
 // ==================== AI FRUIT CHECKER ====================
+// Curated, actionable next steps based on the fruit grade (not AI-dependent).
+const NEXT_STEPS = {
+  good: ["🍽️", "Share it fresh — offer it to neighbours or a local food bank, or store it somewhere cool and dry so it keeps."],
+  ok:   ["🍾", "Too good to waste — press it for juice or cider, or offer it to local farms & stables as animal feed."],
+  bad:  ["♻️", "Best composted — add it to your green bin or compost heap. Never feed mouldy fruit to animals."]
+};
+function nextStepsHtml(grade) {
+  const step = NEXT_STEPS[grade];
+  if (!step) return "";
+  return `<div class="ai-next-steps"><span class="ai-next-icon">${step[0]}</span><div><strong>Next steps</strong><p>${esc(step[1])}</p></div></div>`;
+}
+
 document.getElementById("treePhoto").addEventListener("change", (e) => {
   const btn = document.getElementById("aiCheckBtn");
   const result = document.getElementById("aiResult");
@@ -1722,7 +1818,7 @@ document.getElementById("aiCheckBtn").addEventListener("click", async () => {
     if (!response.ok) throw new Error(result.error);
     const safeGrade = ["good","ok","bad"].includes(result.grade) ? result.grade : "ok";
     resultDiv.className = `ai-result grade-${safeGrade}`;
-    resultDiv.innerHTML = `<div class="ai-result-header">${esc(result.emoji)} ${esc(result.headline)}</div><p>${esc(result.summary)}</p><p style="margin-top:8px;opacity:0.8">💡 ${esc(result.tips)}</p>`;
+    resultDiv.innerHTML = `<div class="ai-result-header">${esc(result.emoji)} ${esc(result.headline)}</div><p>${esc(result.summary)}</p><p style="margin-top:8px;opacity:0.8">💡 ${esc(result.tips)}</p>${nextStepsHtml(safeGrade)}`;
   } catch (err) {
     resultDiv.className = "ai-result grade-ok";
     resultDiv.innerHTML = `<div class="ai-result-header">⚠️ Check unavailable</div><p>Could not analyse the photo right now. You can still submit the tree!</p>`;
@@ -1762,7 +1858,7 @@ document.getElementById("aiCheckerRunBtn").addEventListener("click", async () =>
     if (!response.ok) throw new Error(result.error);
     const safeGrade = ["good","ok","bad"].includes(result.grade) ? result.grade : "ok";
     resultDiv.className = `ai-result grade-${safeGrade}`;
-    resultDiv.innerHTML = `<div class="ai-result-header">${esc(result.emoji)} ${esc(result.headline)}</div><p>${esc(result.summary)}</p><p style="margin-top:8px;opacity:0.8">💡 ${esc(result.tips)}</p>`;
+    resultDiv.innerHTML = `<div class="ai-result-header">${esc(result.emoji)} ${esc(result.headline)}</div><p>${esc(result.summary)}</p><p style="margin-top:8px;opacity:0.8">💡 ${esc(result.tips)}</p>${nextStepsHtml(safeGrade)}`;
   } catch (err) {
     resultDiv.className = "ai-result grade-ok";
     resultDiv.innerHTML = `<div class="ai-result-header">⚠️ Check unavailable</div><p>Could not analyse the photo right now. Try again in a moment!</p>`;

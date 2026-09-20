@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require("uuid");
 const multer = require("multer");
 const path = require("path");
 const Redis = require("ioredis");
+const webpush = require("web-push");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,6 +24,20 @@ const redis = new Redis(redisUrl, {
 });
 redis.on("error", (err) => console.error("Redis error:", err));
 redis.on("connect", () => console.log("Redis connected"));
+
+// ---- WEB PUSH (VAPID) ----
+// Set VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (and optionally VAPID_SUBJECT) in the
+// environment to enable browser push. Generate a keypair with:
+//   npx web-push generate-vapid-keys
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || "";
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || "";
+const pushEnabled = !!(VAPID_PUBLIC && VAPID_PRIVATE);
+if (pushEnabled) {
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT || `mailto:${ADMIN_EMAIL}`, VAPID_PUBLIC, VAPID_PRIVATE);
+  console.log("Web push enabled");
+} else {
+  console.log("Web push disabled (VAPID keys not set)");
+}
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
@@ -190,6 +205,40 @@ async function sendEmail({ to, subject, html, attachments }) {
   } catch (e) { console.error("Email send error:", e.message); return false; }
 }
 
+// Send a browser push notification to every device a user has subscribed.
+// Prunes subscriptions the push service reports as gone (404/410). No-op when disabled.
+async function sendPush(userId, payload) {
+  if (!pushEnabled || !userId) return;
+  try {
+    const raw = await redis.get(`push:sub:${userId}`);
+    if (!raw) return;
+    const subs = JSON.parse(raw);
+    if (!Array.isArray(subs) || subs.length === 0) return;
+    const body = JSON.stringify(payload);
+    const keep = [];
+    for (const sub of subs) {
+      try { await webpush.sendNotification(sub, body); keep.push(sub); }
+      catch (e) { if (!(e.statusCode === 404 || e.statusCode === 410)) keep.push(sub); }
+    }
+    if (keep.length !== subs.length) {
+      if (keep.length) await redis.set(`push:sub:${userId}`, JSON.stringify(keep));
+      else await redis.del(`push:sub:${userId}`);
+    }
+  } catch (e) { console.error("Push send error:", e.message); }
+}
+
+// Send a push to every subscribed user except one (community-wide new-tree alerts).
+async function broadcastPush(payload, exceptUserId) {
+  if (!pushEnabled) return;
+  try {
+    const keys = await redis.keys("push:sub:*");
+    for (const key of keys) {
+      const uid = key.slice("push:sub:".length);
+      if (uid && uid !== exceptUserId) await sendPush(uid, payload);
+    }
+  } catch (e) { console.error("Push broadcast error:", e.message); }
+}
+
 // ---- REGISTER ----
 app.post("/api/register", rateLimit({ scope: "register", max: 5, windowSec: 3600, message: "Too many sign-up attempts. Please try again in an hour." }), async (req, res) => {
   try {
@@ -200,12 +249,12 @@ app.post("/api/register", rateLimit({ scope: "register", max: 5, windowSec: 3600
     const id = uuidv4();
     const hash = await bcrypt.hash(password, 10);
     const isAdmin = email.toLowerCase() === ADMIN_EMAIL;
-    const user = { id, name, email: email.toLowerCase(), password: hash, status: isAdmin ? "approved" : "pending", kgRescued: 0, treesReported: 0, pickups: 0, badges: [], joinedAt: Date.now() };
+    const user = { id, name, email: email.toLowerCase(), password: hash, status: isAdmin ? "approved" : "pending", kgRescued: 0, treesReported: 0, pickups: 0, badges: [], streakWeeks: 0, lastPickupWeek: null, seasonKg: {}, joinedAt: Date.now() };
     await redis.set(`user:${id}`, JSON.stringify(user));
     await redis.set(`user:email:${email.toLowerCase()}`, id);
     if (isAdmin) {
       const token = jwt.sign({ id, name, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
-      return res.json({ token, user: { id, name, email: user.email, kgRescued: 0, treesReported: 0, pickups: 0, badges: [] } });
+      return res.json({ token, user: { id, name, email: user.email, kgRescued: 0, treesReported: 0, pickups: 0, badges: [], streakWeeks: 0 } });
     }
     // Notify the admin so they don't have to keep checking the app manually
     const appUrl = process.env.APP_URL || "https://windfall-app.co.uk";
@@ -236,8 +285,41 @@ app.post("/api/login", rateLimit({ scope: "login", max: 10, windowSec: 900, mess
     user.badges = computeBadges(user);
     await redis.set(`user:${userId}`, JSON.stringify(user));
     const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, kgRescued: user.kgRescued, treesReported: user.treesReported, pickups: user.pickups, badges: user.badges, emailNotifications: user.emailNotifications !== false } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, kgRescued: user.kgRescued, treesReported: user.treesReported, pickups: user.pickups, badges: user.badges, streakWeeks: user.streakWeeks || 0, emailNotifications: user.emailNotifications !== false } });
   } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
+});
+
+// ---- WEB PUSH SUBSCRIPTIONS ----
+app.get("/api/push/public-key", (req, res) => {
+  res.json({ key: pushEnabled ? VAPID_PUBLIC : null });
+});
+
+app.post("/api/push/subscribe", authMiddleware, async (req, res) => {
+  try {
+    const sub = req.body && req.body.subscription;
+    if (!sub || !sub.endpoint) return res.status(400).json({ error: "Invalid subscription" });
+    const key = `push:sub:${req.user.id}`;
+    const raw = await redis.get(key);
+    let subs = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(subs)) subs = [];
+    if (!subs.some(s => s.endpoint === sub.endpoint)) subs.push(sub);
+    await redis.set(key, JSON.stringify(subs));
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: "Server error" }); }
+});
+
+app.post("/api/push/unsubscribe", authMiddleware, async (req, res) => {
+  try {
+    const endpoint = req.body && req.body.endpoint;
+    const key = `push:sub:${req.user.id}`;
+    const raw = await redis.get(key);
+    if (raw && endpoint) {
+      const subs = JSON.parse(raw).filter(s => s.endpoint !== endpoint);
+      if (subs.length) await redis.set(key, JSON.stringify(subs));
+      else await redis.del(key);
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
 app.get("/api/me", authMiddleware, async (req, res) => {
@@ -246,7 +328,7 @@ app.get("/api/me", authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ error: "User not found" });
     user.badges = computeBadges(user);
     await redis.set(`user:${req.user.id}`, JSON.stringify(user));
-    res.json({ id: user.id, name: user.name, email: user.email, kgRescued: user.kgRescued, treesReported: user.treesReported, pickups: user.pickups, badges: user.badges, emailNotifications: user.emailNotifications !== false });
+    res.json({ id: user.id, name: user.name, email: user.email, kgRescued: user.kgRescued, treesReported: user.treesReported, pickups: user.pickups, badges: user.badges, streakWeeks: user.streakWeeks || 0, emailNotifications: user.emailNotifications !== false });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
@@ -374,6 +456,11 @@ app.post("/api/trees", authMiddleware, blockIfSuspended, rateLimit({ scope: "add
     user.badges = computeBadges(user);
     await redis.set(`user:${req.user.id}`, JSON.stringify(user));
     res.json(publicTree(tree));
+    broadcastPush({
+      title: "🌳 New tree on Windfall!",
+      body: `A ${type} tree was just mapped${address ? " near " + address : " in Warwickshire"}. Tap to see it.`,
+      url: `/tree/${id}`
+    }, req.user.id);
   } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
 });
 
@@ -413,6 +500,15 @@ app.patch("/api/trees/:id/pickup", authMiddleware, blockIfSuspended, rateLimit({
     const opener = await redis.get(openerKey);
     if (!opener) { await redis.set(openerKey, req.user.id); user.seasonOpener = true; }
     else if (opener === req.user.id) { user.seasonOpener = true; }
+    // Weekly rescue streak: consecutive calendar weeks with at least one pickup
+    const wk = weekStartMs(Date.now());
+    if (user.lastPickupWeek === wk) { /* already counted this week */ }
+    else if (user.lastPickupWeek === wk - WEEK_MS) user.streakWeeks = (user.streakWeeks || 0) + 1;
+    else user.streakWeeks = 1;
+    user.lastPickupWeek = wk;
+    // Seasonal (calendar-year) kg total, for the seasonal-legend badge
+    if (!user.seasonKg || typeof user.seasonKg !== "object") user.seasonKg = {};
+    user.seasonKg[year] = (user.seasonKg[year] || 0) + kgNum;
     user.badges = computeBadges(user);
     await redis.set(`user:${req.user.id}`, JSON.stringify(user));
     res.json(publicTree(tree));
@@ -421,6 +517,13 @@ app.patch("/api/trees/:id/pickup", authMiddleware, blockIfSuspended, rateLimit({
       headline: `${req.user.name} just rescued ${kgNum}kg of fruit from your ${tree.type} tree.`,
       detail: "Thanks for putting it on the map. That is fruit which would otherwise have gone to waste."
     });
+    if (tree.reportedBy && tree.reportedBy !== req.user.id) {
+      sendPush(tree.reportedBy, {
+        title: "🍎 Fruit rescued from your tree!",
+        body: `${req.user.name} just rescued ${kgNum}kg from your ${tree.type} tree.`,
+        url: `/tree/${tree.id}`
+      });
+    }
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
@@ -587,7 +690,7 @@ app.post("/api/admin/reset-stats", authMiddleware, adminMiddleware, async (req, 
       const u = JSON.parse(await redis.get(key));
       // Clear the badge-tracking fields too, otherwise all-rounder / night-owl /
       // season-opener would immediately come back after a reset.
-      if (u) { u.kgRescued = 0; u.pickups = 0; u.treesReported = 0; u.badges = []; u.pickedTypes = []; u.nightOwl = false; u.seasonOpener = false; await redis.set(key, JSON.stringify(u)); }
+      if (u) { u.kgRescued = 0; u.pickups = 0; u.treesReported = 0; u.badges = []; u.pickedTypes = []; u.nightOwl = false; u.seasonOpener = false; u.streakWeeks = 0; u.lastPickupWeek = null; u.seasonKg = {}; await redis.set(key, JSON.stringify(u)); }
     }
     const treeKeys = await redis.keys("tree:*");
     for (const key of treeKeys) {
@@ -986,6 +1089,15 @@ app.get("/api/leaderboard", async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 
+// Milliseconds in a week, and the UTC-Monday-midnight timestamp for a given time.
+// Using UTC Mondays makes "consecutive week" math exact and DST-safe.
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+function weekStartMs(ts) {
+  const dt = new Date(ts);
+  const day = (dt.getUTCDay() + 6) % 7; // 0 = Monday
+  return Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate() - day);
+}
+
 function computeBadges(user) {
   const badges = [];
   if (user.email === ADMIN_EMAIL) {
@@ -1002,6 +1114,9 @@ function computeBadges(user) {
   if (["apple", "pear", "plum", "cherry", "blackberry"].every(t => picked.includes(t))) badges.push("all-rounder");
   if (user.nightOwl) badges.push("night-owl");
   if (user.seasonOpener) badges.push("season-opener");
+  if ((user.streakWeeks || 0) >= 3) badges.push("hot-streak");
+  const curYearKg = (user.seasonKg && user.seasonKg[new Date().getFullYear()]) || 0;
+  if (curYearKg >= 50) badges.push("seasonal-legend");
   return badges;
 }
 

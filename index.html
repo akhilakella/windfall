@@ -291,6 +291,14 @@
       <div class="stat-box"><div class="stat-num" id="statTrees">0</div><div class="stat-lbl">trees mapped</div></div>
       <div class="stat-box"><div class="stat-num" id="statPickups">0</div><div class="stat-lbl">pickups</div></div>
     </div>
+    <div class="impact-section">
+      <h3>Your Impact</h3>
+      <div class="impact-row">
+        <div class="impact-card"><span class="impact-icon">🍽️</span><div class="impact-text"><div class="impact-num" id="impactMeals">0</div><div class="impact-lbl">meals' worth of food rescued</div></div></div>
+        <div class="impact-card"><span class="impact-icon">🌍</span><div class="impact-text"><div class="impact-num" id="impactCo2">0</div><div class="impact-lbl">kg CO₂e kept out of waste</div></div></div>
+      </div>
+      <p class="impact-note" id="streakLine"></p>
+    </div>
     <div class="badges-section"><h3>Badges</h3><div id="badgesContainer" class="badges-grid"></div></div>
     <div class="field-group" style="margin-top:4px;">
       <label>Change Password</label>
@@ -302,6 +310,10 @@
     <label style="display:flex;align-items:center;gap:10px;font-size:0.85rem;color:var(--text-sub);background:rgba(74,124,63,0.1);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;cursor:pointer;">
       <input type="checkbox" id="emailPrefToggle" style="width:18px;height:18px;accent-color:var(--green-main);cursor:pointer;" />
       <span>Email me when someone picks from or comments on my trees</span>
+    </label>
+    <label id="pushPrefRow" style="display:none;align-items:center;gap:10px;font-size:0.85rem;color:var(--text-sub);background:rgba(74,124,63,0.1);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;cursor:pointer;">
+      <input type="checkbox" id="pushPrefToggle" style="width:18px;height:18px;accent-color:var(--green-main);cursor:pointer;" />
+      <span>🔔 Push me when a new tree is added or someone picks from mine</span>
     </label>
     <button id="shareStatsBtn" class="btn-primary">📸 Share my stats</button>
     <button id="replayTourBtn" class="btn-secondary">🎓 Replay app tour</button>
