@@ -502,6 +502,28 @@ async function initPush() {
     vapidPublicKey = data.key || null;
   } catch { vapidPublicKey = null; }
   refreshPushToggle();
+  autoEnablePush();
+}
+
+// Automatically subscribe to push on sign-in. The browser still shows its own
+// one-time "Allow notifications?" prompt (that can't be bypassed), but the user
+// no longer has to hunt for a toggle. Skips if already denied. On iOS the prompt
+// needs a tap, so there the Profile toggle handles it.
+async function autoEnablePush() {
+  if (!vapidPublicKey) return;
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
+  if (Notification.permission === "denied") return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+      if (permission !== "granted") { refreshPushToggle(); return; }
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) });
+    }
+    await apiFetch("/api/push/subscribe", { method: "POST", body: JSON.stringify({ subscription: sub }) });
+    refreshPushToggle();
+  } catch { refreshPushToggle(); }
 }
 
 async function refreshPushToggle() {
